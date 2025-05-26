@@ -17,20 +17,48 @@ function App() {
   return (
     <Provider store={store}>
       <Router>
-        <div className="flex flex-col min-h-screen">
+        <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 scroll-smooth">
+          {/* Fixed Header */}
           <Header />
-          <main className="flex-grow">
-            <Routes>
-              <Route path="/" element={<HomeScreen />} exact />
-              <Route path="/login" element={<LoginScreen />} />
-              <Route path="/register" element={<RegisterScreen />} />
-              <Route path="/profile" element={<ProfileScreen />} />
-              <Route path="*" element={<NotFoundScreen />} />
-            </Routes>
+          
+          {/* Main Content with Auto Height */}
+          <main className="flex-grow relative z-0">
+            {/* Global page container */}
+            <div className="w-full min-h-full">
+              <Routes>
+                <Route path="/" element={<HomeScreen />} exact />
+                <Route path="/login" element={<LoginScreen />} />
+                <Route path="/register" element={<RegisterScreen />} />
+                <Route path="/profile" element={<ProfileScreen />} />
+                <Route path="*" element={<NotFoundScreen />} />
+              </Routes>
+            </div>
           </main>
+          
+          {/* Footer */}
           <Footer />
+          
+          {/* Toast Container with Improved Styling */}
+          <ToastContainer
+            position="top-right"
+            autoClose={5000}
+            hideProgressBar={false}
+            newestOnTop
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+            theme="light"
+            toastStyle={{
+              background: 'rgba(255, 255, 255, 0.9)',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(229, 231, 235, 0.5)',
+              borderRadius: '0.75rem',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+            }}
+          />
         </div>
-        <ToastContainer position="top-right" autoClose={5000} hideProgressBar={false} />
       </Router>
     </Provider>
   )

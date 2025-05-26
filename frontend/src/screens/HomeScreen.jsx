@@ -127,16 +127,16 @@ const HomeScreen = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       {/* Hero Section */}
       <PageHeader
         title={
-          <div className="from-primary-400 to-primary-600 bg-gradient-to-r bg-clip-text text-transparent">
+          <div className="from-primary-400 to-primary-600 bg-gradient-to-r bg-clip-text text-transparent max-w-4xl mx-auto">
             Your Career Journey <span className="bg-gradient-to-r from-pink-500 to-violet-500 bg-clip-text">Starts Here</span>
           </div>
         }
         subtitle={
-          <div className="text-white/90 text-xl backdrop-blur-sm bg-black/10 inline-block px-6 py-3 rounded-lg">
+          <div className="text-white/90 text-xl backdrop-blur-sm bg-black/10 inline-block px-6 py-3 rounded-xl shadow-soft max-w-2xl mx-auto">
             Connect with top employers and find your dream job with our AI-powered matching technology
           </div>
         }
@@ -159,14 +159,14 @@ const HomeScreen = () => {
       />
 
       {/* Stats Section */}
-      <section className="bg-white py-16 shadow-soft border-b border-gray-100">
-        <div className="container mx-auto px-4">
-          <h2 className="text-2xl md:text-3xl font-bold text-center mb-4 text-gray-800">
+      <section className="bg-white py-20 shadow-soft border-b border-gray-100">
+        <div className="container mx-auto px-4 max-w-7xl">
+          <h2 className="text-2xl md:text-3xl font-bold text-center mb-6 text-gray-800">
             <span className="bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
               Trusted by Professionals and Companies
             </span>
           </h2>
-          <p className="text-center text-gray-600 mb-12 max-w-3xl mx-auto">
+          <p className="text-center text-gray-600 mb-16 max-w-3xl mx-auto">
             Join thousands of job seekers and employers who trust CyFuture for their career and hiring needs
           </p>
           
@@ -174,21 +174,21 @@ const HomeScreen = () => {
             {stats.map((stat, index) => (
               <div 
                 key={index} 
-                className="text-center group hover:transform hover:scale-105 transition-all duration-300 bg-gradient-to-b from-white to-gray-50 p-6 rounded-xl shadow-soft border border-gray-100 hover:shadow-lg"
+                className="text-center group hover:transform hover:scale-105 transition-all duration-300 bg-gradient-to-b from-white to-gray-50 p-8 rounded-xl shadow-soft border border-gray-100 hover:shadow-lg"
                 style={{ 
                   opacity: 0,
                   animation: 'fadeInUp 0.5s ease forwards',
                   animationDelay: `${index * 150}ms`
                 }}
               >
-                <div className="bg-primary-50 inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 mx-auto group-hover:bg-primary-100 transition-colors duration-300 shadow-soft">
+                <div className="bg-primary-50 inline-flex items-center justify-center w-20 h-20 rounded-full mb-6 mx-auto group-hover:bg-primary-100 transition-colors duration-300 shadow-soft">
                   <FontAwesomeIcon 
                     icon={stat.icon} 
                     className="text-3xl text-primary-600 transform group-hover:scale-110 transition-transform duration-300"
                     beat={index === 0}
                   />
                 </div>
-                <div className="text-3xl font-bold mb-1 bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
+                <div className="text-3xl font-bold mb-2 bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
                   {stat.count}
                 </div>
                 <div className="text-gray-600 font-medium group-hover:text-primary-600 transition-colors duration-300">
@@ -201,22 +201,26 @@ const HomeScreen = () => {
       </section>
 
       {/* Features Section */}
-      <FeatureShowcase
-        title="Why Choose CyFuture?"
-        subtitle="Our platform offers cutting-edge features designed to make your job search smarter and more efficient"
-        features={features}
-        columns={3}
-        style="default"
-        backgroundColor="gray"
-      />
+      <section className="py-20">
+        <FeatureShowcase
+          title="Why Choose CyFuture?"
+          subtitle="Our platform offers cutting-edge features designed to make your job search smarter and more efficient"
+          features={features}
+          columns={3}
+          style="default"
+          backgroundColor="gray"
+        />
+      </section>
 
       {/* Job Categories Section */}
-      <JobCategoriesSection />
+      <section className="py-20 bg-gradient-to-br from-gray-50 to-white">
+        <JobCategoriesSection />
+      </section>
 
       {/* Job Search Section */}
-      <section className="py-16 bg-gradient-to-br from-primary-50 via-white to-secondary-50">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
+      <section className="py-20 bg-gradient-to-br from-primary-50 via-white to-secondary-50">
+        <div className="container mx-auto px-4 max-w-7xl">
+          <div className="text-center mb-16">
             <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
               Find Your Perfect Job
             </h2>
@@ -225,7 +229,7 @@ const HomeScreen = () => {
             </p>
           </div>
           
-          <div className="max-w-4xl mx-auto mb-12">
+          <div className="max-w-4xl mx-auto">
             <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-soft p-8 border border-gray-100 hover:shadow-lg transition-all duration-300">
               <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="space-y-2">
@@ -299,106 +303,114 @@ const HomeScreen = () => {
                     />
                   </div>
                 </div>
+              </div>
 
-                <div className="lg:col-span-4 mt-4">
-                  <button 
-                    onClick={handleSearch}
-                    className="w-full bg-gradient-to-r from-primary-600 to-primary-700 text-white font-medium py-3 px-4 rounded-lg transition-all flex items-center justify-center transform hover:scale-[1.01] hover:shadow-lg hover:from-primary-500 hover:to-primary-600 active:scale-[0.99] duration-200"
-                  >
-                    <FontAwesomeIcon icon={faSearch} className="mr-2" />
-                    Search Jobs
-                  </button>
-                </div>
+              <div className="mt-8">
+                <button 
+                  onClick={handleSearch}
+                  className="w-full md:w-auto px-8 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-medium rounded-lg transition-all flex items-center justify-center transform hover:scale-[1.01] hover:shadow-lg hover:from-primary-500 hover:to-primary-600 active:scale-[0.99] duration-200"
+                >
+                  <FontAwesomeIcon icon={faSearch} className="mr-2" />
+                  Search Jobs
+                </button>
               </div>
             </div>
           </div>
+        </div>
+      </section>
 
-          {/* Featured Job Listings */}
-          <div className="mb-8">
-            <div className="flex flex-col md:flex-row justify-between items-center mb-8">
-              <div className="text-center md:text-left mb-4 md:mb-0">
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Featured Opportunities</h3>
-                <p className="text-gray-600">Discover top-rated positions from leading companies</p>
+      {/* Featured Jobs Section */}
+      <section className="py-20 bg-white">
+        <div className="container mx-auto px-4 max-w-7xl">
+          <div className="flex flex-col md:flex-row justify-between items-center mb-12">
+            <div className="text-center md:text-left mb-6 md:mb-0">
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">Featured Opportunities</h3>
+              <p className="text-gray-600">Discover top-rated positions from leading companies</p>
+            </div>
+            <Link 
+              to="/jobs" 
+              className="group flex items-center px-6 py-3 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-all duration-300"
+            >
+              View All Jobs 
+              <FontAwesomeIcon 
+                icon={faArrowRight} 
+                className="ml-2 transform group-hover:translate-x-1 transition-transform duration-300" 
+              />
+            </Link>
+          </div>
+
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader />
+              <p className="mt-4 text-gray-600 animate-pulse">Finding the perfect opportunities...</p>
+            </div>
+          ) : error ? (
+            <Message variant="error">{error}</Message>
+          ) : !jobs || jobs.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-soft border border-gray-100 p-8 text-center max-w-2xl mx-auto">
+              <div className="w-16 h-16 bg-primary-50 rounded-full mx-auto mb-4 flex items-center justify-center">
+                <FontAwesomeIcon icon={faBriefcase} className="text-2xl text-primary-600" />
               </div>
+              <h3 className="text-xl font-semibold mb-2">No jobs found</h3>
+              <p className="text-gray-600 mb-4">Check back later for new opportunities or adjust your search criteria.</p>
               <Link 
-                to="/jobs" 
-                className="group flex items-center px-6 py-3 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-all duration-300"
+                to="/register" 
+                className="inline-flex items-center justify-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-all duration-300 font-medium group"
               >
-                View All Jobs 
+                Get job alerts
                 <FontAwesomeIcon 
                   icon={faArrowRight} 
                   className="ml-2 transform group-hover:translate-x-1 transition-transform duration-300" 
                 />
               </Link>
             </div>
-
-            {loading ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <Loader />
-                <p className="mt-4 text-gray-600 animate-pulse">Finding the perfect opportunities...</p>
-              </div>
-            ) : error ? (
-              <Message variant="error">{error}</Message>
-            ) : !jobs || jobs.length === 0 ? (
-              <div className="bg-white rounded-xl shadow-soft border border-gray-100 p-8 text-center">
-                <div className="w-16 h-16 bg-primary-50 rounded-full mx-auto mb-4 flex items-center justify-center">
-                  <FontAwesomeIcon icon={faBriefcase} className="text-2xl text-primary-600" />
-                </div>
-                <h3 className="text-xl font-semibold mb-2">No jobs found</h3>
-                <p className="text-gray-600 mb-4">Check back later for new opportunities or adjust your search criteria.</p>
-                <Link 
-                  to="/register" 
-                  className="inline-flex items-center justify-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-all duration-300 font-medium group"
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {jobs.slice(0, 6).map((job, index) => (
+                <div 
+                  key={job._id} 
+                  className="transform transition-all duration-300 hover:translate-y-[-5px]"
+                  style={{ 
+                    opacity: 0,
+                    animation: 'fadeInUp 0.5s ease forwards',
+                    animationDelay: `${index * 150}ms` 
+                  }}
                 >
-                  Get job alerts
-                  <FontAwesomeIcon 
-                    icon={faArrowRight} 
-                    className="ml-2 transform group-hover:translate-x-1 transition-transform duration-300" 
+                  <JobCard 
+                    job={{
+                      _id: job._id,
+                      title: job.title,
+                      company: job.admin?.companyName || "Company",
+                      location: job.location,
+                      salary: job.salary,
+                      jobType: job.jobType,
+                      experienceLevel: job.experienceLevel,
+                      description: job.description,
+                      createdAt: job.createdAt,
+                      skills: job.requiredSkills || []
+                    }} 
                   />
-                </Link>
-              </div>
-            ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {jobs.slice(0, 6).map((job, index) => (
-                  <div 
-                    key={job._id} 
-                    className="transform transition-all duration-300 hover:translate-y-[-5px]"
-                    style={{ 
-                      opacity: 0,
-                      animation: 'fadeInUp 0.5s ease forwards',
-                      animationDelay: `${index * 150}ms` 
-                    }}
-                  >
-                    <JobCard 
-                      job={{
-                        _id: job._id,
-                        title: job.title,
-                        company: job.admin?.companyName || "Company",
-                        location: job.location,
-                        salary: job.salary,
-                        jobType: job.jobType,
-                        experienceLevel: job.experienceLevel,
-                        description: job.description,
-                        createdAt: job.createdAt,
-                        skills: job.requiredSkills || []
-                      }} 
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
-      {/* Company Logos Section */}
-      <CompaniesSection />
+      {/* Companies Section */}
+      <section className="py-20 bg-gradient-to-br from-white to-gray-50">
+        <CompaniesSection />
+      </section>
 
       {/* Testimonials Section */}
-      <TestimonialsSection />
+      <section className="py-20">
+        <TestimonialsSection />
+      </section>
 
       {/* Call to Action Section */}
-      <CtaSection userType="jobseeker" />
+      <section className="py-20">
+        <CtaSection userType="jobseeker" />
+      </section>
     </div>
   );
 };

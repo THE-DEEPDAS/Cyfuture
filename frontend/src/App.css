@@ -1,3 +1,4 @@
+/* Base container styles */
 .container {
   max-width: 1280px;
   margin: 0 auto;
@@ -29,84 +30,216 @@
   background: #64748b;
 }
 
-/* Animations */
+/* Enhanced Animations */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-.animate-fade-in {
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Animation classes */
+.animate-fadeIn {
   animation: fadeIn 0.5s ease-out;
 }
 
-/* Form Styles */
-input[type="text"],
-input[type="email"],
-input[type="password"],
-textarea,
-select {
-  @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors duration-200;
+.animate-fadeInUp {
+  animation: fadeInUp 0.5s ease-out;
 }
 
+.animate-slideIn {
+  animation: slideIn 0.5s ease-out;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.3s ease-out;
+}
+
+/* Form Styles */
+.form-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #e5e7eb;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.form-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* Button Styles */
 .btn {
-  @apply inline-flex items-center justify-center px-6 py-3 rounded-lg font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  cursor: pointer;
+  outline: none;
 }
 
 .btn-primary {
-  @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
+  background: linear-gradient(to right, #4338ca, #3730a3);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(to right, #4f46e5, #4338ca);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+              0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .btn-secondary {
-  @apply bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-gray-500;
+  background-color: white;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
+
+.btn-secondary:hover {
+  background-color: #f9fafb;
 }
 
 /* Card Styles */
 .card {
-  @apply bg-white rounded-xl shadow-soft border border-gray-100 overflow-hidden transition-shadow duration-200 hover:shadow-lg;
+  background-color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  border-radius: 1rem;
+  border: 1px solid rgba(229, 231, 235, 0.5);
+  overflow: hidden;
+  transition: all 0.2s;
+}
+
+.card:hover {
+  box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.1),
+              0 15px 25px -3px rgba(0, 0, 0, 0.05);
+  transform: translateY(-4px);
 }
 
 .card-header {
-  @apply px-6 py-4 bg-gray-50 border-b border-gray-100;
+  padding: 1.5rem;
+  background-color: rgba(249, 250, 251, 0.8);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .card-body {
-  @apply p-6;
+  padding: 1.5rem;
 }
 
 /* Typography */
-h1 {
-  @apply text-4xl font-bold text-gray-900 mb-4;
-}
-
-h2 {
-  @apply text-3xl font-bold text-gray-900 mb-4;
-}
-
-h3 {
-  @apply text-2xl font-bold text-gray-900 mb-3;
+.heading-gradient {
+  background: linear-gradient(to right, #4338ca, #3730a3);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* Table Styles */
 .table-container {
-  @apply overflow-x-auto rounded-lg border border-gray-200;
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  border: 1px solid #e5e7eb;
 }
 
-table {
-  @apply min-w-full divide-y divide-gray-200;
+.table-base {
+  min-width: 100%;
+  border-collapse: collapse;
 }
 
-th {
-  @apply px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+.table-header {
+  padding: 0.75rem 1.5rem;
+  background-color: rgba(249, 250, 251, 0.8);
+  backdrop-filter: blur(8px);
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-td {
-  @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900;
+.table-cell {
+  padding: 1rem 1.5rem;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  color: #111827;
 }
 
-tr:nth-child(even) {
-  @apply bg-gray-50;
+.table-row-alt {
+  background-color: rgba(249, 250, 251, 0.6);
+  backdrop-filter: blur(8px);
 }
 
-tr:hover {
-  @apply bg-gray-100;
+.table-row:hover {
+  background-color: rgba(243, 244, 246, 0.8);
+  backdrop-filter: blur(8px);
+}
+
+/* Shadow Styles */
+.shadow-soft {
+  box-shadow: 0 2px 15px -3px rgba(0, 0, 0, 0.07),
+              0 10px 20px -2px rgba(0, 0, 0, 0.04);
+}
+
+.shadow-soft-lg {
+  box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.1),
+              0 15px 25px -3px rgba(0, 0, 0, 0.05);
+}
+
+/* Glassmorphism */
+.glass {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(229, 231, 235, 0.5);
+}
+
+/* Transitions */
+.transition-all {
+  transition: all 0.2s ease;
+}
+
+.hover\:scale {
+  transform: scale(1);
+  transition: transform 0.2s ease;
+}
+
+.hover\:scale:hover {
+  transform: scale(1.02);
 }
