@@ -16,17 +16,6 @@ import {
   JOB_DELETE_REQUEST,
   JOB_DELETE_SUCCESS,
   JOB_DELETE_FAIL,
-  JOB_APPLICATION_CREATE_REQUEST,
-  JOB_APPLICATION_CREATE_SUCCESS,
-  JOB_APPLICATION_CREATE_FAIL,
-  JOB_APPLICATION_CREATE_RESET,
-  JOB_APPLICATIONS_LIST_REQUEST,
-  JOB_APPLICATIONS_LIST_SUCCESS,
-  JOB_APPLICATIONS_LIST_FAIL,
-  JOB_APPLICATION_UPDATE_REQUEST,
-  JOB_APPLICATION_UPDATE_SUCCESS,
-  JOB_APPLICATION_UPDATE_FAIL,
-  JOB_APPLICATION_UPDATE_RESET,
 } from '../constants/jobConstants';
 
 export const jobListReducer = (state = { jobs: [] }, action) => {
@@ -34,12 +23,9 @@ export const jobListReducer = (state = { jobs: [] }, action) => {
     case JOB_LIST_REQUEST:
       return { loading: true, jobs: [] };
     case JOB_LIST_SUCCESS:
-      return {
-        loading: false,
-        jobs: action.payload.jobs,
-        pages: action.payload.pages,
-        page: action.payload.page,
-        total: action.payload.total,
+      return { 
+        loading: false, 
+        jobs: Array.isArray(action.payload) ? action.payload : [] 
       };
     case JOB_LIST_FAIL:
       return { loading: false, error: action.payload };
@@ -48,10 +34,10 @@ export const jobListReducer = (state = { jobs: [] }, action) => {
   }
 };
 
-export const jobDetailsReducer = (state = { job: { requiredSkills: [], jobRequirements: [], chatbotQuestions: [] } }, action) => {
+export const jobDetailsReducer = (state = { job: {} }, action) => {
   switch (action.type) {
     case JOB_DETAILS_REQUEST:
-      return { ...state, loading: true };
+      return { loading: true, ...state };
     case JOB_DETAILS_SUCCESS:
       return { loading: false, job: action.payload };
     case JOB_DETAILS_FAIL:
@@ -99,49 +85,6 @@ export const jobDeleteReducer = (state = {}, action) => {
       return { loading: false, success: true };
     case JOB_DELETE_FAIL:
       return { loading: false, error: action.payload };
-    default:
-      return state;
-  }
-};
-
-export const jobApplicationCreateReducer = (state = {}, action) => {
-  switch (action.type) {
-    case JOB_APPLICATION_CREATE_REQUEST:
-      return { loading: true };
-    case JOB_APPLICATION_CREATE_SUCCESS:
-      return { loading: false, success: true, application: action.payload };
-    case JOB_APPLICATION_CREATE_FAIL:
-      return { loading: false, error: action.payload };
-    case JOB_APPLICATION_CREATE_RESET:
-      return {};
-    default:
-      return state;
-  }
-};
-
-export const jobApplicationsListReducer = (state = { applications: [] }, action) => {
-  switch (action.type) {
-    case JOB_APPLICATIONS_LIST_REQUEST:
-      return { loading: true, applications: [] };
-    case JOB_APPLICATIONS_LIST_SUCCESS:
-      return { loading: false, applications: action.payload };
-    case JOB_APPLICATIONS_LIST_FAIL:
-      return { loading: false, error: action.payload };
-    default:
-      return state;
-  }
-};
-
-export const jobApplicationUpdateReducer = (state = {}, action) => {
-  switch (action.type) {
-    case JOB_APPLICATION_UPDATE_REQUEST:
-      return { loading: true };
-    case JOB_APPLICATION_UPDATE_SUCCESS:
-      return { loading: false, success: true, application: action.payload };
-    case JOB_APPLICATION_UPDATE_FAIL:
-      return { loading: false, error: action.payload };
-    case JOB_APPLICATION_UPDATE_RESET:
-      return {};
     default:
       return state;
   }

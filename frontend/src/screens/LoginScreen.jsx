@@ -41,98 +41,120 @@ const LoginScreen = () => {
   };
 
   return (
-    <FormContainer>
-      <div className="bg-white p-8 rounded-lg shadow-md">
-        <h1 className="text-3xl font-bold text-center mb-6">Sign In</h1>
-        
-        {error && <Message variant="error">{error}</Message>}
-        
-        <form onSubmit={submitHandler}>
-          <div className="mb-4">
-            <label htmlFor="email" className="block text-gray-700 mb-2">
-              <FontAwesomeIcon icon="envelope" className="mr-2" />
-              Email Address
-            </label>
-            <input
-              type="email"
-              id="email"
-              className="input"
-              placeholder="Enter your email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+    <div className="min-h-screen bg-gray-50 py-12">
+      <div className="container mx-auto px-4">
+        <div className="max-w-md mx-auto">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h2>
+            <p className="text-gray-600">Sign in to access your account</p>
           </div>
+          
+          <div className="bg-white rounded-xl shadow-soft p-8 border border-gray-100">
+            {error && <Message variant="error">{error}</Message>}
+            
+            <form onSubmit={submitHandler} className="space-y-6">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                  <FontAwesomeIcon icon="envelope" className="mr-2 text-primary-500" />
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
 
-          <div className="mb-6">
-            <label htmlFor="password" className="block text-gray-700 mb-2">
-              <FontAwesomeIcon icon="lock" className="mr-2" />
-              Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                id="password"
-                className="input pr-10"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                    <FontAwesomeIcon icon="lock" className="mr-2 text-primary-500" />
+                    Password
+                  </label>
+                  <a href="#" className="text-sm text-primary-600 hover:text-primary-800">
+                    Forgot password?
+                  </a>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    id="password"
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700"
+                    onClick={togglePasswordVisibility}
+                  >
+                    <FontAwesomeIcon icon={showPassword ? 'eye-slash' : 'eye'} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  id="remember-me"
+                  name="remember-me"
+                  type="checkbox"
+                  className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
+                  Remember me
+                </label>
+              </div>
+
               <button
-                type="button"
-                className="absolute inset-y-0 right-0 px-3 flex items-center"
-                onClick={togglePasswordVisibility}
+                type="submit"
+                className="w-full flex justify-center items-center px-4 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 font-medium transition-colors"
+                disabled={loading}
               >
-                <FontAwesomeIcon icon={showPassword ? 'eye-slash' : 'eye'} />
+                {loading ? (
+                  <>
+                    <Loader size="sm" />
+                    <span className="ml-2">Signing In...</span>
+                  </>
+                ) : (
+                  <>
+                    <FontAwesomeIcon icon="sign-in-alt" className="mr-2" />
+                    Sign In
+                  </>
+                )}
               </button>
+            </form>
+
+            <div className="mt-8 pt-6 border-t border-gray-200 text-center">
+              <p className="text-gray-600 mb-4">
+                New user?{' '}
+                <Link
+                  to={redirect ? `/register?redirect=${redirect}` : '/register'}
+                  className="text-primary-600 hover:text-primary-800 font-medium"
+                >
+                  Create an account
+                </Link>
+              </p>
+              
+              <p className="text-gray-600">
+                Looking to hire?{' '}
+                <Link
+                  to="/register-company"
+                  className="text-primary-600 hover:text-primary-800 font-medium"
+                >
+                  Register as a company
+                </Link>
+              </p>
             </div>
           </div>
-
-          <button
-            type="submit"
-            className="btn btn-primary w-full py-3"
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <Loader size="sm" />
-                <span className="ml-2">Signing In...</span>
-              </>
-            ) : (
-              <>
-                <FontAwesomeIcon icon="sign-in-alt" className="mr-2" />
-                Sign In
-              </>
-            )}
-          </button>
-        </form>
-
-        <div className="mt-4 text-center">
-          <p className="text-gray-600">
-            New user?{' '}
-            <Link
-              to={redirect ? `/register?redirect=${redirect}` : '/register'}
-              className="text-blue-600 hover:underline"
-            >
-              Register here
-            </Link>
-          </p>
-        </div>
-        
-        <div className="mt-2 text-center">
-          <p className="text-gray-600">
-            Looking to hire?{' '}
-            <Link
-              to="/register-company"
-              className="text-blue-600 hover:underline"
-            >
-              Register as a company
-            </Link>
-          </p>
         </div>
       </div>
-    </FormContainer>
+    </div>
   );
 };
 
