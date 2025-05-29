@@ -17,22 +17,19 @@ function App() {
   return (
     <Provider store={store}>
       <Router>
-        <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 scroll-smooth">
+        <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
           {/* Fixed Header */}
           <Header />
           
-          {/* Main Content with Auto Height */}
-          <main className="flex-grow relative z-0">
-            {/* Global page container */}
-            <div className="w-full min-h-full">
-              <Routes>
-                <Route path="/" element={<HomeScreen />} exact />
-                <Route path="/login" element={<LoginScreen />} />
-                <Route path="/register" element={<RegisterScreen />} />
-                <Route path="/profile" element={<ProfileScreen />} />
-                <Route path="*" element={<NotFoundScreen />} />
-              </Routes>
-            </div>
+          {/* Main Content */}
+          <main className="flex-1 w-full">
+            <Routes>
+              <Route path="/" element={<HomeScreen />} exact />
+              <Route path="/login" element={<LoginScreen />} />
+              <Route path="/register" element={<RegisterScreen />} />
+              <Route path="/profile" element={<ProfileScreen />} />
+              <Route path="*" element={<NotFoundScreen />} />
+            </Routes>
           </main>
           
           {/* Footer */}

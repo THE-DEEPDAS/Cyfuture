@@ -2,23 +2,83 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Keyframe Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulseSoft {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
 @layer base {
   body {
-    @apply bg-gray-50 text-gray-900;
+    @apply bg-gray-50 text-gray-900 font-sans antialiased scroll-smooth;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-medium tracking-tight;
   }
 }
 
 @layer components {
   .form-input {
-    @apply w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200;
+    @apply w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 shadow-sm;
   }
 
   .btn {
-    @apply inline-flex items-center justify-center px-6 py-3 rounded-xl font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-xl font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 transform hover:translate-y-[-2px] active:translate-y-0;
   }
 
   .btn-primary {
-    @apply bg-gradient-to-r from-primary-600 to-primary-700 text-white hover:from-primary-500 hover:to-primary-600 focus:ring-primary-500;
+    @apply bg-gradient-to-r from-primary-600 to-primary-700 text-white hover:from-primary-500 hover:to-primary-600 focus:ring-primary-500 shadow-md hover:shadow-lg;
   }
 
   .btn-secondary {
@@ -26,7 +86,7 @@
   }
 
   .card {
-    @apply bg-white/90 backdrop-blur-sm rounded-2xl shadow-soft border border-gray-100/50 overflow-hidden transition-shadow duration-200 hover:shadow-lg;
+    @apply bg-white/90 backdrop-blur-sm rounded-2xl shadow-soft border border-gray-100/50 overflow-hidden transition-all duration-300 hover:shadow-lg hover:translate-y-[-4px];
   }
 
   .card-header {
@@ -42,11 +102,83 @@
   }
 
   .table-container {
-    @apply overflow-x-auto rounded-xl border border-gray-200;
+    @apply overflow-x-auto rounded-xl border border-gray-200 shadow-soft;
   }
+  
+  /* Animation Utilities */
+  .animate-fadeIn {
+    animation: fadeIn 0.5s ease-in-out forwards;
+  }
+  
+  .animate-fadeInUp {
+    animation: fadeInUp 0.6s ease-out forwards;
+  }
+  
+  .animate-scaleIn {
+    animation: scaleIn 0.5s ease-out forwards;
+  }
+  
+  .animate-slideInRight {
+    animation: slideInRight 0.5s ease-out forwards;
+  }
+  
+  .animate-slideInLeft {
+    animation: slideInLeft 0.5s ease-out forwards;
+  }
+  
+  .animate-pulse-subtle {
+    animation: pulseSoft 2.5s infinite;
+  }
+  
+  .hover-scale {
+    @apply transition-transform duration-300 hover:scale-105;
+  }
+  
+  .hover-lift {
+    @apply transition-transform duration-300 hover:-translate-y-1;
+  }
+}
+  
+  /* Animation Utilities */
+  .animate-fadeIn {
+    animation: fadeIn 0.5s ease-in-out forwards;
+  }
+  
+  .animate-fadeInUp {
+    animation: fadeInUp 0.6s ease-out forwards;
+  }
+  
+  .animate-scaleIn {
+    animation: scaleIn 0.5s ease-out forwards;
+  }
+  
+  .animate-slideInRight {
+    animation: slideInRight 0.5s ease-out forwards;
+  }
+  
+  .animate-slideInLeft {
+    animation: slideInLeft 0.5s ease-out forwards;
+  }
+  
+  .animate-pulse-subtle {
+    animation: pulseSoft 2.5s infinite;
+  }
+  
+  .hover-scale {
+    @apply transition-transform duration-300 hover:scale-105;
+  }
+  
+  .hover-lift {
+    @apply transition-transform duration-300 hover:-translate-y-1;
+  }
+}
 
   .table-base {
     @apply min-w-full divide-y divide-gray-200;
+  }
+
+  .table-header {
+    @apply px-6 py-3 bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider text-left;
   }
 
   .table-header {

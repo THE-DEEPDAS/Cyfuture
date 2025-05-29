@@ -1,30 +1,44 @@
 import React from 'react';
+import SectionHeader from '../common/SectionHeader';
 
 const CompaniesSection = () => {
-  // Mock company logos (in a real app, these would be actual image URLs)
+  // Real company logos for a more professional look
   const companies = [
-    { name: 'Google', logo: 'https://via.placeholder.com/150x50?text=Google' },
-    { name: 'Microsoft', logo: 'https://via.placeholder.com/150x50?text=Microsoft' },
-    { name: 'Amazon', logo: 'https://via.placeholder.com/150x50?text=Amazon' },
-    { name: 'Facebook', logo: 'https://via.placeholder.com/150x50?text=Facebook' },
-    { name: 'Apple', logo: 'https://via.placeholder.com/150x50?text=Apple' },
-    { name: 'IBM', logo: 'https://via.placeholder.com/150x50?text=IBM' }
+    { name: 'Google', logo: 'https://www.vectorlogo.zone/logos/google/google-ar21.svg' },
+    { name: 'Microsoft', logo: 'https://www.vectorlogo.zone/logos/microsoft/microsoft-ar21.svg' },
+    { name: 'Amazon', logo: 'https://www.vectorlogo.zone/logos/amazon/amazon-ar21.svg' },
+    { name: 'Meta', logo: 'https://www.vectorlogo.zone/logos/meta/meta-ar21.svg' },
+    { name: 'Apple', logo: 'https://www.vectorlogo.zone/logos/apple/apple-ar21.svg' },
+    { name: 'IBM', logo: 'https://www.vectorlogo.zone/logos/ibm/ibm-ar21.svg' },
+    { name: 'Oracle', logo: 'https://www.vectorlogo.zone/logos/oracle/oracle-ar21.svg' },
+    { name: 'Intel', logo: 'https://www.vectorlogo.zone/logos/intel/intel-ar21.svg' }
   ];
   
   return (
-    <section className="py-12 bg-white border-t border-gray-100">
+    <section className="py-16 bg-white border-t border-gray-100">
       <div className="container mx-auto px-4">
-        <div className="text-center mb-10">
-          <h2 className="text-2xl font-bold text-gray-700">Trusted by Leading Companies</h2>
-        </div>
+        <SectionHeader
+          title="Trusted by Leading Companies"
+          subtitle="Join thousands of businesses that trust CyFuture for their recruitment needs"
+          alignment="center"
+          size="default"
+          withLine={true}
+        />
         
-        <div className="flex flex-wrap justify-center items-center gap-8 md:gap-12 max-w-5xl mx-auto">
+        <div className="flex flex-wrap justify-center items-center gap-8 md:gap-12 max-w-6xl mx-auto mt-16">
           {companies.map((company, index) => (
-            <div key={index} className="group transition-transform duration-300 hover:scale-105">
+            <div 
+              key={index} 
+              className="group transition-all duration-300 hover:scale-105 p-4 rounded-xl hover:bg-gray-50 hover:shadow-soft"
+              style={{ 
+                animationDelay: `${index * 100}ms`,
+                animation: 'fadeIn 0.5s ease forwards'
+              }}
+            >
               <img 
                 src={company.logo} 
                 alt={`${company.name} logo`} 
-                className="h-10 md:h-12 w-auto opacity-60 grayscale group-hover:opacity-100 group-hover:grayscale-0 transition-all duration-300" 
+                className="h-12 md:h-16 w-auto opacity-60 grayscale group-hover:opacity-100 group-hover:grayscale-0 transition-all duration-300" 
               />
             </div>
           ))}

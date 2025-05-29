@@ -13,7 +13,7 @@ import {
 
 const JobCard = ({ job }) => {
   return (
-    <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-soft border border-gray-100/50 overflow-hidden transition-all duration-300 hover:shadow-lg hover:translate-y-[-4px] group">
+    <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-soft border border-gray-100/50 overflow-hidden transition-all duration-300 hover:shadow-lg hover:translate-y-[-4px] group h-full">
       <div className="p-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
           <div className="mb-3 md:mb-0 flex items-start">
@@ -53,15 +53,15 @@ const JobCard = ({ job }) => {
         
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-gray-600 mb-6">
           <div className="flex items-center group/item">
-            <div className="w-10 h-10 rounded-xl bg-gray-50/80 backdrop-blur-sm flex items-center justify-center mr-3 group-hover/item:bg-primary-50 transition-colors duration-200">
-              <FontAwesomeIcon icon={faMapMarkerAlt} className="text-gray-400 group-hover/item:text-primary-500 transition-colors duration-200" />
+            <div className="w-10 h-10 rounded-xl bg-gray-50/80 backdrop-blur-sm flex items-center justify-center mr-3 group-hover:item:bg-primary-50 transition-colors duration-200">
+              <FontAwesomeIcon icon={faMapMarkerAlt} className="text-gray-400 group-hover:item:text-primary-500 transition-colors duration-200" />
             </div>
             <span className="group-hover:item:text-primary-600 transition-colors duration-200">{job.location || 'Remote'}</span>
           </div>
           {job.salary && (
             <div className="flex items-center group/item">
-              <div className="w-10 h-10 rounded-xl bg-gray-50/80 backdrop-blur-sm flex items-center justify-center mr-3 group-hover/item:bg-primary-50 transition-colors duration-200">
-                <FontAwesomeIcon icon={faMoneyBillWave} className="text-gray-400 group-hover/item:text-primary-500 transition-colors duration-200" />
+              <div className="w-10 h-10 rounded-xl bg-gray-50/80 backdrop-blur-sm flex items-center justify-center mr-3 group-hover:item:bg-primary-50 transition-colors duration-200">
+                <FontAwesomeIcon icon={faMoneyBillWave} className="text-gray-400 group-hover:item:text-primary-500 transition-colors duration-200" />
               </div>
               <span className="group-hover:item:text-primary-600 transition-colors duration-200">{job.salary}</span>
             </div>
