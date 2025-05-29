@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { toast } from 'react-toastify';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   faSearch,
   faFilter,
@@ -16,7 +17,11 @@ import {
   faGraduationCap,
   faHandshake,
   faCheck,
-  faArrowRight
+  faArrowRight,
+  faChevronDown,
+  faEnvelope,
+  faPhone,
+  faCalendarAlt
 } from '@fortawesome/free-solid-svg-icons';
 import { listJobs } from '../actions/jobActions';
 import Loader from '../components/common/Loader';
@@ -28,6 +33,7 @@ import CompaniesSection from '../components/home/CompaniesSection';
 import TestimonialsSection from '../components/home/TestimonialsSection';
 import CtaSection from '../components/common/CtaSection';
 import JobCard from '../components/job/JobCard';
+import SectionContainer from '../components/common/SectionContainer';
 
 const HomeScreen = () => {
   const dispatch = useDispatch();
@@ -40,6 +46,8 @@ const HomeScreen = () => {
 
   const jobList = useSelector((state) => state.jobList);
   const { loading, error, jobs } = jobList;
+
+  const [searchFocused, setSearchFocused] = useState(false);
 
   useEffect(() => {
     dispatch(listJobs());
@@ -127,109 +135,167 @@ const HomeScreen = () => {
   ];
 
   return (
-    <div className="flex flex-col w-full">
+    <div className="flex flex-col min-h-screen bg-gray-50">
       {/* Hero Section */}
-      <section className="relative w-full min-h-[80vh] flex items-center justify-center overflow-hidden">
-        <PageHeader
-          title={
-            <div className="text-4xl md:text-5xl lg:text-6xl font-bold from-primary-400 to-primary-600 bg-gradient-to-r bg-clip-text text-transparent max-w-4xl mx-auto">
-              Your Career Journey <span className="bg-gradient-to-r from-pink-500 to-violet-500 bg-clip-text">Starts Here</span>
-            </div>
-          }
-          subtitle={
-            <div className="text-white/90 text-xl backdrop-blur-sm bg-black/10 inline-block px-6 py-3 rounded-xl shadow-soft max-w-2xl mx-auto">
-              Connect with top employers and find your dream job with our AI-powered matching technology
-            </div>
-          }
-          backgroundImage="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80"
-          size="large"
-          textAlignment="center"
-          actions={[
-            {
-              label: "Get Started",
-              link: "/register",
-              primary: true,
-            icon: faRocket
-          },
-          {
-            label: "Hire Talent",
-            link: "/register-company",
-            primary: false
-          }
-        ]}
-      />
-
-      {/* Stats Section */}
-      <section className="bg-white py-20 shadow-md border-b border-gray-100">
-        <div className="container mx-auto px-4 max-w-7xl">
-          <h2 className="text-2xl md:text-3xl font-bold text-center mb-6 text-gray-800">
-            <span className="bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
-              Trusted by Professionals and Companies
-            </span>
-          </h2>
-          <p className="text-center text-gray-600 mb-16 max-w-3xl mx-auto">
-            Join thousands of job seekers and employers who trust CyFuture for their career and hiring needs
-          </p>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-5xl mx-auto">
-            {stats.map((stat, index) => (
-              <div 
-                key={index} 
-                className="text-center group hover:transform hover:scale-105 transition-all duration-300 bg-gradient-to-b from-white to-gray-50 p-8 rounded-xl shadow-soft border border-gray-100 hover:shadow-lg animate-fadeInUp"
-                style={{ 
-                  animationDelay: `${index * 150}ms`
-                }}
-              >
-                <div className="bg-primary-50 inline-flex items-center justify-center w-20 h-20 rounded-full mb-6 mx-auto group-hover:bg-primary-100 transition-colors duration-300 shadow-soft">
-                  <FontAwesomeIcon 
-                    icon={stat.icon} 
-                    className="text-3xl text-primary-600 transform group-hover:scale-110 transition-transform duration-300"
-                    beat={index === 0}
+      <section className="relative min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 via-primary-900 to-gray-900 text-white overflow-hidden">
+        {/* Animated background elements */}
+        <motion.div 
+          animate={{ scale: [1, 1.2, 1], rotate: [0, 180, 360] }}
+          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+          className="absolute inset-0 overflow-hidden opacity-30"
+        >
+          <div className="absolute top-1/4 -left-1/4 w-[40rem] h-[40rem] bg-primary-500/20 rounded-full blur-3xl"></div>
+          <div className="absolute bottom-1/4 -right-1/4 w-[40rem] h-[40rem] bg-secondary-500/20 rounded-full blur-3xl"></div>
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full h-full bg-gradient-to-b from-transparent via-primary-900/20 to-gray-900/40"></div>
+        </motion.div>
+        {/* Content */}
+        <div className="w-full flex flex-col items-center justify-center relative z-10 text-center px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="max-w-4xl mx-auto"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 1, delay: 0.2 }}
+              className="mb-8"
+            >
+              <h1 className="text-4xl md:text-6xl lg:text-7xl font-extrabold mb-6 bg-gradient-to-r from-white via-primary-200 to-white bg-clip-text text-transparent leading-tight">
+                Your Career Journey{' '}
+                <span className="bg-gradient-to-r from-secondary-400 to-secondary-600 bg-clip-text text-transparent">Starts Here</span>
+              </h1>
+              <p className="text-lg md:text-2xl text-gray-300 mb-12 max-w-2xl mx-auto leading-relaxed">
+                Connect with top employers and find your dream job with our
+                <span className="text-primary-400"> AI-powered </span>
+                matching technology
+              </p>
+            </motion.div>
+          </motion.div>
+          {/* Enhanced Search Bar */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.4 }}
+            className={`w-full max-w-2xl mx-auto transition-all duration-300 transform ${searchFocused ? 'scale-105' : ''}`}
+          >
+            <div className="relative bg-white/10 backdrop-blur-xl rounded-2xl p-4">
+              <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1 relative group">
+                  <FontAwesomeIcon icon={faSearch} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 group-hover:text-primary-400 transition-colors duration-300" />
+                  <input
+                    type="text"
+                    name="search"
+                    value={filters.search}
+                    onChange={handleFilterChange}
+                    onFocus={() => setSearchFocused(true)}
+                    onBlur={() => setSearchFocused(false)}
+                    placeholder="Job title or keyword"
+                    className="w-full pl-12 pr-4 py-3 bg-white/20 border border-white/30 rounded-xl text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-300 group-hover:bg-white/30"
                   />
                 </div>
-                <div className="text-3xl font-bold mb-2 bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
-                  {stat.count}
+                <div className="flex-1 relative group">
+                  <FontAwesomeIcon icon={faMapMarkerAlt} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 group-hover:text-primary-400 transition-colors duration-300" />
+                  <input
+                    type="text"
+                    name="location"
+                    value={filters.location}
+                    onChange={handleFilterChange}
+                    placeholder="Location"
+                    className="w-full pl-12 pr-4 py-3 bg-white/20 border border-white/30 rounded-xl text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-300 group-hover:bg-white/30"
+                  />
                 </div>
-                <div className="text-gray-600 font-medium group-hover:text-primary-600 transition-colors duration-300">
-                  {stat.label}
-                </div>
-              </div>
-            ))}
+                <motion.button
+                  type="submit"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="md:w-auto w-full px-8 py-3 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-500 hover:to-primary-600 text-white rounded-xl font-semibold transition-all duration-300 flex items-center justify-center group shadow-lg shadow-primary-900/20"
+                >
+                  Search Jobs
+                  <FontAwesomeIcon icon={faArrowRight} className="ml-2 group-hover:translate-x-1 transition-transform duration-300" />
+                </motion.button>
+              </form>
+            </div>
+          </motion.div>
+          {/* Stats Section - horizontally distributed */}
+          <div className="w-full flex justify-center mt-16">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl w-full">
+              {stats.map((stat, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: index * 0.1 }}
+                  whileHover={{ scale: 1.05 }}
+                  className="group p-8 bg-gradient-to-b from-white/10 to-gray-900/10 rounded-2xl shadow-soft border border-white/10 hover:shadow-lg transition-all duration-300 text-center"
+                >
+                  <div className="bg-primary-50/20 group-hover:bg-primary-100/30 transition-colors duration-300 w-20 h-20 rounded-xl flex items-center justify-center mx-auto mb-6">
+                    <motion.div animate={{ scale: [1, 1.2, 1], rotate: [0, 5, 0, -5, 0] }} transition={{ duration: 2, repeat: Infinity, repeatType: "reverse" }}>
+                      <FontAwesomeIcon icon={stat.icon} className="text-3xl text-primary-200" />
+                    </motion.div>
+                  </div>
+                  <motion.div initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: index * 0.2 }} className="text-center">
+                    <div className="text-2xl md:text-3xl font-bold mb-2 bg-gradient-to-r from-primary-200 to-primary-400 bg-clip-text text-transparent">
+                      {stat.count}
+                    </div>
+                    <div className="text-gray-200 font-medium group-hover:text-primary-100 transition-colors duration-300">
+                      {stat.label}
+                    </div>
+                  </motion.div>
+                </motion.div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section className="py-20">
-        <FeatureShowcase
-          title="Why Choose CyFuture?"
-          subtitle="Our platform offers cutting-edge features designed to make your job search smarter and more efficient"
-          features={features}
-          columns={3}
-          style="default"
-          backgroundColor="gray"
-        />
-      </section>
+      {/* Features Section - horizontally distributed */}
+      <SectionContainer background="gradient" spacing="default" maxWidth="7xl" hasPattern>
+        <div className="text-center max-w-3xl mx-auto mb-16">
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+            <h2 className="text-4xl font-bold mb-6 bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">Why Choose CyFuture?</h2>
+            <p className="text-xl text-gray-600 leading-relaxed">Our platform offers cutting-edge features designed to make your job search smarter and more efficient</p>
+          </motion.div>
+        </div>
+        <div className="flex flex-col md:flex-row justify-center gap-8 max-w-7xl mx-auto">
+          {features.map((feature, index) => (
+            <motion.div
+              key={index}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: index * 0.2 }}
+              whileHover={{ y: -8 }}
+              className="bg-white rounded-2xl p-8 shadow-soft hover:shadow-lg transition-all duration-500 border border-gray-100 group flex-1 min-w-[260px] max-w-sm mx-auto"
+            >
+              <motion.div whileHover={{ scale: 1.1, rotate: 5 }} className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center mb-6 group-hover:bg-primary-200 transition-colors duration-300 mx-auto">
+                <FontAwesomeIcon icon={feature.icon} className="text-2xl text-primary-600 group-hover:text-primary-700 transition-colors duration-300" />
+              </motion.div>
+              <h3 className="text-xl font-semibold mb-4 text-gray-900 group-hover:text-primary-600 transition-colors duration-300 text-center">{feature.title}</h3>
+              <p className="text-gray-600 leading-relaxed group-hover:text-gray-700 transition-colors duration-300 text-center">{feature.description}</p>
+            </motion.div>
+          ))}
+        </div>
+      </SectionContainer>
 
-      {/* Job Categories Section */}
-      <section className="py-20 bg-gradient-to-br from-gray-50 to-white">
-        <JobCategoriesSection />
-      </section>
+      {/* Job Categories Section - centered */}
+      <SectionContainer background="white" spacing="default" maxWidth="7xl" hasDivider>
+        <div className="flex flex-col items-center justify-center">
+          <JobCategoriesSection />
+        </div>
+      </SectionContainer>
 
-      {/* Job Search Section */}
-      <section className="py-20 bg-gradient-to-br from-primary-50 via-white to-secondary-50">
-        <div className="container mx-auto px-4 max-w-7xl">
+      {/* Job Search Section - centered */}
+      <SectionContainer background="primary" spacing="default" maxWidth="7xl" hasPattern>
+        <div className="w-full flex flex-col items-center justify-center">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
-              Find Your Perfect Job
-            </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Search our extensive database of opportunities tailored to your skills and experience
-            </p>
+            <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-4xl font-bold mb-6 text-white">Find Your Perfect Job</motion.h2>
+            <motion.p initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }} className="text-xl text-gray-200 max-w-3xl mx-auto">Search our extensive database of opportunities tailored to your skills and experience</motion.p>
           </div>
-          
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-soft p-8 border border-gray-100 hover:shadow-lg transition-all duration-300 animate-fadeIn">
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.4 }} className="w-full max-w-4xl mx-auto">
+            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-soft p-8 border border-gray-100 hover:shadow-lg transition-all duration-300">
               <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-gray-700">Search</label>
@@ -304,74 +370,103 @@ const HomeScreen = () => {
                 </div>
               </div>
 
-              <div className="mt-8 flex justify-center">
+              <motion.div 
+                className="mt-8 flex justify-center"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
                 <button 
                   onClick={handleSearch}
-                  className="w-full md:w-auto px-8 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-medium rounded-lg transition-all flex items-center justify-center transform hover:scale-[1.02] hover:shadow-lg hover:from-primary-500 hover:to-primary-600 active:scale-[0.99] duration-200"
+                  className="w-full md:w-auto px-8 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-medium rounded-lg transition-all flex items-center justify-center hover:from-primary-500 hover:to-primary-600 shadow-lg shadow-primary-600/20"
                 >
                   <FontAwesomeIcon icon={faSearch} className="mr-2" />
                   Search Jobs
                 </button>
-              </div>
+              </motion.div>
             </div>
-          </div>
+          </motion.div>
         </div>
-      </section>
+      </SectionContainer>
 
-      {/* Featured Jobs Section */}
-      <section className="py-20 bg-white">
-        <div className="container mx-auto px-4 max-w-7xl">
-          <div className="flex flex-col md:flex-row justify-between items-center mb-12">
-            <div className="text-center md:text-left mb-6 md:mb-0">
-              <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Featured Opportunities</h3>
-              <p className="text-gray-600 text-lg">Discover top-rated positions from leading companies</p>
-            </div>
-            <Link 
-              to="/jobs" 
-              className="group flex items-center px-6 py-3 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-all duration-300 shadow-sm hover:shadow"
-            >
-              View All Jobs 
-              <FontAwesomeIcon 
-                icon={faArrowRight} 
-                className="ml-2 transform group-hover:translate-x-1 transition-transform duration-300" 
-              />
+      {/* Featured Jobs Section - grid, centered */}
+      <SectionContainer background="gray" spacing="default" maxWidth="7xl" hasPattern>
+        <div className="flex flex-col md:flex-row justify-between items-center mb-16">
+          <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} className="text-center md:text-left mb-6 md:mb-0">
+            <h3 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Featured Opportunities</h3>
+            <p className="text-xl text-gray-600 max-w-2xl">Discover top-rated positions from leading companies</p>
+          </motion.div>
+          <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link to="/jobs" className="group flex items-center px-8 py-4 bg-white text-primary-600 rounded-xl hover:bg-primary-50 transition-all duration-300 shadow-soft hover:shadow-lg border border-gray-100/50">
+              View All Jobs
+              <FontAwesomeIcon icon={faArrowRight} className="ml-2 transform group-hover:translate-x-1 transition-transform duration-300" />
             </Link>
-          </div>
-
+          </motion.div>
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 justify-center">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Loader />
-              <p className="mt-4 text-gray-600 animate-pulse">Finding the perfect opportunities...</p>
+            <div className="col-span-full flex flex-col items-center justify-center py-16">
+              <motion.div 
+                animate={{ rotate: 360 }}
+                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                className="w-16 h-16 mb-4"
+              >
+                <Loader />
+              </motion.div>
+              <p className="text-lg text-gray-600 animate-pulse">Finding the perfect opportunities...</p>
             </div>
           ) : error ? (
-            <Message variant="error">{error}</Message>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="col-span-full"
+            >
+              <Message variant="error">{error}</Message>
+            </motion.div>
           ) : !jobs || jobs.length === 0 ? (
-            <div className="bg-white rounded-xl shadow-soft border border-gray-100 p-8 text-center max-w-2xl mx-auto">
-              <div className="w-16 h-16 bg-primary-50 rounded-full mx-auto mb-4 flex items-center justify-center">
-                <FontAwesomeIcon icon={faBriefcase} className="text-2xl text-primary-600" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">No jobs found</h3>
-              <p className="text-gray-600 mb-4">Check back later for new opportunities or adjust your search criteria.</p>
-              <Link 
-                to="/register" 
-                className="inline-flex items-center justify-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-all duration-300 font-medium group"
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="col-span-full bg-white/80 backdrop-blur-sm rounded-2xl shadow-soft border border-gray-100 p-12 text-center max-w-2xl mx-auto"
+            >
+              <motion.div 
+                className="w-20 h-20 bg-primary-50 rounded-full mx-auto mb-6 flex items-center justify-center"
+                animate={{ 
+                  scale: [1, 1.1, 1],
+                  rotate: [0, 10, -10, 0]
+                }}
+                transition={{
+                  duration: 3,
+                  repeat: Infinity,
+                  repeatType: "reverse"
+                }}
               >
-                Get job alerts
-                <FontAwesomeIcon 
-                  icon={faArrowRight} 
-                  className="ml-2 transform group-hover:translate-x-1 transition-transform duration-300" 
-                />
-              </Link>
-            </div>
+                <FontAwesomeIcon icon={faBriefcase} className="text-3xl text-primary-600" />
+              </motion.div>
+              <h3 className="text-2xl font-semibold mb-4">No jobs found</h3>
+              <p className="text-gray-600 mb-8 text-lg">Check back later for new opportunities or adjust your search criteria.</p>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Link 
+                  to="/register" 
+                  className="inline-flex items-center justify-center px-8 py-4 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-all duration-300 font-medium group shadow-soft hover:shadow-lg"
+                >
+                  Get job alerts
+                  <FontAwesomeIcon 
+                    icon={faArrowRight} 
+                    className="ml-2 transform group-hover:translate-x-1 transition-transform duration-300" 
+                  />
+                </Link>
+              </motion.div>
+            </motion.div>
           ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <>
               {jobs.slice(0, 6).map((job, index) => (
-                <div 
+                <motion.div 
                   key={job._id} 
-                  className="transform transition-all duration-300 hover:translate-y-[-5px] animate-fadeInUp"
-                  style={{ 
-                    animationDelay: `${index * 150}ms` 
-                  }}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: index * 0.1 }}
+                  whileHover={{ y: -8 }}
                 >
                   <JobCard 
                     job={{
@@ -385,27 +480,35 @@ const HomeScreen = () => {
                       description: job.description,
                       createdAt: job.createdAt,
                       skills: job.requiredSkills || []
-                    }} 
+                    }}
                   />
-                </div>
+                </motion.div>
               ))}
-            </div>
+            </>
           )}
         </div>
-      </section>
+      </SectionContainer>
 
-      {/* Companies Section */}
-      <section className="py-20 bg-gradient-to-br from-white to-gray-50">
-        <CompaniesSection />
-      </section>
+      {/* Companies Section - centered logos */}
+      <SectionContainer background="white" spacing="default" maxWidth="7xl" hasDivider>
+        <div className="flex flex-col items-center justify-center">
+          <CompaniesSection />
+        </div>
+      </SectionContainer>
 
-      {/* Testimonials Section */}
-      <TestimonialsSection />
+      {/* Testimonials Section - centered */}
+      <SectionContainer background="dark" spacing="default" maxWidth="7xl" hasPattern>
+        <div className="flex flex-col items-center justify-center">
+          <TestimonialsSection />
+        </div>
+      </SectionContainer>
 
-      {/* Call to Action Section */}
-      <section className="py-20">
-        <CtaSection userType="jobseeker" />
-      </section>
+      {/* Call to Action Section - centered */}
+      <SectionContainer background="primary" spacing="default" maxWidth="7xl" hasPattern>
+        <div className="flex flex-col items-center justify-center">
+          <CtaSection userType="jobseeker" />
+        </div>
+      </SectionContainer>
     </div>
   );
 };
