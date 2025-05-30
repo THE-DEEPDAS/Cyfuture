@@ -1,0 +1,20 @@
+{
+  "name": "talent-match",
+  "version": "1.0.0",
+  "description": "Professional job application platform with resume parsing and matching",
+  "type": "module",
+  "scripts": {
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^8.2.2",
+    "postcss": "^8.5.4",
+    "tailwindcss": "^4.1.8"
+  }
+}
