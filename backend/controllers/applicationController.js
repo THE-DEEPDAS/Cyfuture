@@ -14,7 +14,7 @@ import asyncHandler from "express-async-handler";
 // @access  Private/Candidate
 export const applyToJob = asyncHandler(async (req, res) => {
   const { jobId } = req.params;
-  const { resumeId, coverLetter, responses } = req.body;
+  const { resumeId, coverLetter, screeningResponses } = req.body;
 
   // Check if job exists and is active
   const job = await Job.findById(jobId);
@@ -26,6 +26,24 @@ export const applyToJob = asyncHandler(async (req, res) => {
   if (!job.isActive || new Date(job.expiresAt) < new Date()) {
     res.status(400);
     throw new Error("This job posting is no longer active");
+  }
+
+  // Validate screening responses
+  if (job.screeningQuestions?.length > 0) {
+    // Check if all required questions are answered
+    const missingRequired = job.screeningQuestions
+      .filter((q) => q.required)
+      .some(
+        (q) =>
+          !screeningResponses.find(
+            (r) => r.question.toString() === q._id.toString()
+          )
+      );
+
+    if (missingRequired) {
+      res.status(400);
+      throw new Error("Please answer all required screening questions");
+    }
   }
 
   // Check if already applied
@@ -43,14 +61,14 @@ export const applyToJob = asyncHandler(async (req, res) => {
   const resume = await Resume.findOne({
     _id: resumeId,
     user: req.user._id,
-  });
+  }).select("+parsedData");
 
   if (!resume) {
     res.status(404);
     throw new Error("Resume not found");
   }
 
-  // Create initial messages from responses
+  // Create initial messages from responses if any
   const initialMessages = [];
 
   if (responses && Array.isArray(responses)) {
@@ -67,12 +85,17 @@ export const applyToJob = asyncHandler(async (req, res) => {
     }
   }
 
+  // Create the application
   const application = await Application.create({
     job: jobId,
     candidate: req.user._id,
     resume: resumeId,
     coverLetter,
     status: "pending",
+    screeningResponses: screeningResponses.map((response) => ({
+      question: response.question,
+      response: response.response,
+    })),
     messages: initialMessages,
   });
 
@@ -110,7 +133,61 @@ export const applyToJob = asyncHandler(async (req, res) => {
     createdAt: new Date(),
   });
 
+  // Evaluate screening responses with LLM if enabled
+  if (job.llmEvaluation?.enabled) {
+    try {
+      const [screeningEval, overallEval] = await Promise.all([
+        evaluateScreeningResponses(
+          application,
+          job,
+          req.user.preferredLanguage
+        ),
+        generateOverallEvaluation(application, job),
+      ]);
+
+      // Update application with evaluations
+      application.screeningResponses = application.screeningResponses.map(
+        (response) => {
+          const evaluation = screeningEval.responses.find(
+            (r) => r.questionId.toString() === response.question.toString()
+          )?.evaluation;
+
+          if (evaluation) {
+            response.llmEvaluation = {
+              score: evaluation.score,
+              feedback: evaluation.feedback,
+              confidence: evaluation.confidence,
+            };
+          }
+          return response;
+        }
+      );
+
+      application.overallEvaluation = {
+        totalScore: overallEval.totalScore,
+        breakdown: overallEval.breakdown,
+        flags: overallEval.flags,
+        recommendationStrength: overallEval.recommendationStrength,
+      };
+    } catch (error) {
+      console.error("LLM Evaluation Error:", error);
+      // Continue with application submission even if LLM evaluation fails
+    }
+  }
+
+  // Save the application
   await application.save();
+
+  // Notify the company
+  await notifyUser(job.company, {
+    type: "NEW_APPLICATION",
+    title: `New application for ${job.title}`,
+    message: `${req.user.name} has applied for the ${job.title} position`,
+    reference: {
+      type: "Application",
+      id: application._id,
+    },
+  });
 
   res.status(201).json(application);
 });

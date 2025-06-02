@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faPlus,
+  faTrash,
+  faBars,
+  faGripLines,
+} from "@fortawesome/free-solid-svg-icons";
 import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
 import { toast } from "react-toastify";
@@ -20,6 +26,17 @@ const JobForm = ({ job, onSave, onCancel }) => {
     salaryCurrency: "USD",
     shortlistCount: 10,
     expiresAt: "",
+    screeningQuestions: [],
+    llmEvaluation: {
+      enabled: true,
+      minConfidenceScore: 0.7,
+      evaluationCriteria: [
+        { name: "Technical Skills", weight: 3 },
+        { name: "Experience", weight: 3 },
+        { name: "Communication", weight: 2 },
+        { name: "Culture Fit", weight: 2 },
+      ],
+    },
   });
 
   const [errors, setErrors] = useState({});
@@ -53,6 +70,17 @@ const JobForm = ({ job, onSave, onCancel }) => {
         salaryCurrency: job.salary?.currency || "USD",
         shortlistCount: job.shortlistCount || 10,
         expiresAt: formattedDate,
+        screeningQuestions: job.screeningQuestions || [],
+        llmEvaluation: job.llmEvaluation || {
+          enabled: true,
+          minConfidenceScore: 0.7,
+          evaluationCriteria: [
+            { name: "Technical Skills", weight: 3 },
+            { name: "Experience", weight: 3 },
+            { name: "Communication", weight: 2 },
+            { name: "Culture Fit", weight: 2 },
+          ],
+        },
       });
     } else {
       // Initialize with default expiry date (30 days from now)
@@ -146,6 +174,8 @@ const JobForm = ({ job, onSave, onCancel }) => {
         shortlistCount: Number(formData.shortlistCount),
         expiresAt: new Date(formData.expiresAt).toISOString(),
         isActive: true,
+        screeningQuestions: formData.screeningQuestions,
+        llmEvaluation: formData.llmEvaluation,
       };
 
       let result;
@@ -170,324 +200,527 @@ const JobForm = ({ job, onSave, onCancel }) => {
     }
   };
 
+  const addScreeningQuestion = () => {
+    setFormData((prev) => ({
+      ...prev,
+      screeningQuestions: [
+        ...prev.screeningQuestions,
+        {
+          question: "",
+          expectedResponseType: "text",
+          choices: [],
+          weight: 1,
+          required: true,
+        },
+      ],
+    }));
+  };
+
+  const removeScreeningQuestion = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      screeningQuestions: prev.screeningQuestions.filter((_, i) => i !== index),
+    }));
+  };
+
+  const updateScreeningQuestion = (index, field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      screeningQuestions: prev.screeningQuestions.map((q, i) =>
+        i === index ? { ...q, [field]: value } : q
+      ),
+    }));
+  };
+
   return (
-    <div className="card fade-in">
-      <h2 className="text-xl font-semibold text-white mb-6">
-        {job ? "Edit Job Posting" : "Create New Job Posting"}
-      </h2>
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <div>
+            <label
+              htmlFor="title"
+              className="block text-sm font-medium text-gray-300 mb-1"
+            >
+              Job Title
+            </label>
+            <input
+              type="text"
+              id="title"
+              name="title"
+              value={formData.title}
+              onChange={handleChange}
+              className={`w-full ${errors.title ? "border-error-500" : ""}`}
+              placeholder="e.g. Frontend Developer"
+            />
+            {errors.title && (
+              <p className="text-error-500 text-xs mt-1">{errors.title}</p>
+            )}
+          </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-4">
+          <div>
+            <label
+              htmlFor="location"
+              className="block text-sm font-medium text-gray-300 mb-1"
+            >
+              Location
+            </label>
+            <input
+              type="text"
+              id="location"
+              name="location"
+              value={formData.location}
+              onChange={handleChange}
+              className={`w-full ${errors.location ? "border-error-500" : ""}`}
+              placeholder="e.g. New York, NY or Remote"
+            />
+            {errors.location && (
+              <p className="text-error-500 text-xs mt-1">{errors.location}</p>
+            )}
+          </div>
+
+          <div>
+            <label
+              htmlFor="type"
+              className="block text-sm font-medium text-gray-300 mb-1"
+            >
+              Job Type
+            </label>
+            <select
+              id="type"
+              name="type"
+              value={formData.type}
+              onChange={handleChange}
+              className="w-full"
+            >
+              <option value="Full-time">Full-time</option>
+              <option value="Part-time">Part-time</option>
+              <option value="Contract">Contract</option>
+              <option value="Internship">Internship</option>
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="experience"
+              className="block text-sm font-medium text-gray-300 mb-1"
+            >
+              Experience Level
+            </label>
+            <select
+              id="experience"
+              name="experience"
+              value={formData.experience}
+              onChange={handleChange}
+              className="w-full"
+            >
+              <option value="Entry">Entry</option>
+              <option value="Junior">Junior</option>
+              <option value="Mid-Level">Mid-Level</option>
+              <option value="Senior">Senior</option>
+              <option value="Executive">Executive</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label
-                htmlFor="title"
+                htmlFor="salaryMin"
                 className="block text-sm font-medium text-gray-300 mb-1"
               >
-                Job Title
+                Min Salary
               </label>
               <input
-                type="text"
-                id="title"
-                name="title"
-                value={formData.title}
-                onChange={handleChange}
-                className={`w-full ${errors.title ? "border-error-500" : ""}`}
-                placeholder="e.g. Frontend Developer"
-              />
-              {errors.title && (
-                <p className="text-error-500 text-xs mt-1">{errors.title}</p>
-              )}
-            </div>
-
-            <div>
-              <label
-                htmlFor="location"
-                className="block text-sm font-medium text-gray-300 mb-1"
-              >
-                Location
-              </label>
-              <input
-                type="text"
-                id="location"
-                name="location"
-                value={formData.location}
+                type="number"
+                id="salaryMin"
+                name="salaryMin"
+                value={formData.salaryMin}
                 onChange={handleChange}
                 className={`w-full ${
-                  errors.location ? "border-error-500" : ""
+                  errors.salaryMin ? "border-error-500" : ""
                 }`}
-                placeholder="e.g. New York, NY or Remote"
+                placeholder="e.g. 70000"
               />
-              {errors.location && (
-                <p className="text-error-500 text-xs mt-1">{errors.location}</p>
-              )}
-            </div>
-
-            <div>
-              <label
-                htmlFor="type"
-                className="block text-sm font-medium text-gray-300 mb-1"
-              >
-                Job Type
-              </label>
-              <select
-                id="type"
-                name="type"
-                value={formData.type}
-                onChange={handleChange}
-                className="w-full"
-              >
-                <option value="Full-time">Full-time</option>
-                <option value="Part-time">Part-time</option>
-                <option value="Contract">Contract</option>
-                <option value="Internship">Internship</option>
-              </select>
-            </div>
-
-            <div>
-              <label
-                htmlFor="experience"
-                className="block text-sm font-medium text-gray-300 mb-1"
-              >
-                Experience Level
-              </label>
-              <select
-                id="experience"
-                name="experience"
-                value={formData.experience}
-                onChange={handleChange}
-                className="w-full"
-              >
-                <option value="Entry">Entry</option>
-                <option value="Junior">Junior</option>
-                <option value="Mid-Level">Mid-Level</option>
-                <option value="Senior">Senior</option>
-                <option value="Executive">Executive</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label
-                  htmlFor="salaryMin"
-                  className="block text-sm font-medium text-gray-300 mb-1"
-                >
-                  Min Salary
-                </label>
-                <input
-                  type="number"
-                  id="salaryMin"
-                  name="salaryMin"
-                  value={formData.salaryMin}
-                  onChange={handleChange}
-                  className={`w-full ${
-                    errors.salaryMin ? "border-error-500" : ""
-                  }`}
-                  placeholder="e.g. 70000"
-                />
-                {errors.salaryMin && (
-                  <p className="text-error-500 text-xs mt-1">
-                    {errors.salaryMin}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="salaryMax"
-                  className="block text-sm font-medium text-gray-300 mb-1"
-                >
-                  Max Salary
-                </label>
-                <input
-                  type="number"
-                  id="salaryMax"
-                  name="salaryMax"
-                  value={formData.salaryMax}
-                  onChange={handleChange}
-                  className={`w-full ${
-                    errors.salaryMax ? "border-error-500" : ""
-                  }`}
-                  placeholder="e.g. 90000"
-                />
-                {errors.salaryMax && (
-                  <p className="text-error-500 text-xs mt-1">
-                    {errors.salaryMax}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label
-                  htmlFor="salaryCurrency"
-                  className="block text-sm font-medium text-gray-300 mb-1"
-                >
-                  Currency
-                </label>
-                <select
-                  id="salaryCurrency"
-                  name="salaryCurrency"
-                  value={formData.salaryCurrency}
-                  onChange={handleChange}
-                  className="w-full"
-                >
-                  <option value="USD">USD</option>
-                  <option value="EUR">EUR</option>
-                  <option value="GBP">GBP</option>
-                  <option value="CAD">CAD</option>
-                  <option value="AUD">AUD</option>
-                  <option value="INR">INR</option>
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="shortlistCount"
-                  className="block text-sm font-medium text-gray-300 mb-1"
-                >
-                  Shortlist Limit
-                </label>
-                <input
-                  type="number"
-                  id="shortlistCount"
-                  name="shortlistCount"
-                  value={formData.shortlistCount}
-                  onChange={handleChange}
-                  className="w-full"
-                  min="1"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label
-                htmlFor="expiresAt"
-                className="block text-sm font-medium text-gray-300 mb-1"
-              >
-                Expiry Date
-              </label>
-              <input
-                type="date"
-                id="expiresAt"
-                name="expiresAt"
-                value={formData.expiresAt}
-                onChange={handleChange}
-                className={`w-full ${
-                  errors.expiresAt ? "border-error-500" : ""
-                }`}
-              />
-              {errors.expiresAt && (
+              {errors.salaryMin && (
                 <p className="text-error-500 text-xs mt-1">
-                  {errors.expiresAt}
+                  {errors.salaryMin}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label
+                htmlFor="salaryMax"
+                className="block text-sm font-medium text-gray-300 mb-1"
+              >
+                Max Salary
+              </label>
+              <input
+                type="number"
+                id="salaryMax"
+                name="salaryMax"
+                value={formData.salaryMax}
+                onChange={handleChange}
+                className={`w-full ${
+                  errors.salaryMax ? "border-error-500" : ""
+                }`}
+                placeholder="e.g. 90000"
+              />
+              {errors.salaryMax && (
+                <p className="text-error-500 text-xs mt-1">
+                  {errors.salaryMax}
                 </p>
               )}
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label
-                htmlFor="skills"
+                htmlFor="salaryCurrency"
                 className="block text-sm font-medium text-gray-300 mb-1"
               >
-                Required Skills (comma separated)
+                Currency
+              </label>
+              <select
+                id="salaryCurrency"
+                name="salaryCurrency"
+                value={formData.salaryCurrency}
+                onChange={handleChange}
+                className="w-full"
+              >
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+                <option value="CAD">CAD</option>
+                <option value="AUD">AUD</option>
+                <option value="INR">INR</option>
+              </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="shortlistCount"
+                className="block text-sm font-medium text-gray-300 mb-1"
+              >
+                Shortlist Limit
               </label>
               <input
-                type="text"
-                id="skills"
-                name="skills"
-                value={formData.skills}
+                type="number"
+                id="shortlistCount"
+                name="shortlistCount"
+                value={formData.shortlistCount}
                 onChange={handleChange}
-                className={`w-full ${errors.skills ? "border-error-500" : ""}`}
-                placeholder="e.g. React, JavaScript, CSS"
+                className="w-full"
+                min="1"
               />
-              {errors.skills && (
-                <p className="text-error-500 text-xs mt-1">{errors.skills}</p>
-              )}
             </div>
+          </div>
 
-            <div>
-              <label
-                htmlFor="description"
-                className="block text-sm font-medium text-gray-300 mb-1"
-              >
-                Job Description
-              </label>
-              <textarea
-                id="description"
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                rows="4"
-                className={`w-full ${
-                  errors.description ? "border-error-500" : ""
-                }`}
-                placeholder="Describe the job role, responsibilities, and what you're looking for..."
-              ></textarea>
-              {errors.description && (
-                <p className="text-error-500 text-xs mt-1">
-                  {errors.description}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label
-                htmlFor="requirements"
-                className="block text-sm font-medium text-gray-300 mb-1"
-              >
-                Requirements (one per line)
-              </label>
-              <textarea
-                id="requirements"
-                name="requirements"
-                value={formData.requirements}
-                onChange={handleChange}
-                rows="5"
-                className={`w-full ${
-                  errors.requirements ? "border-error-500" : ""
-                }`}
-                placeholder="e.g. 3+ years of React experience"
-              ></textarea>
-              {errors.requirements && (
-                <p className="text-error-500 text-xs mt-1">
-                  {errors.requirements}
-                </p>
-              )}
-            </div>
+          <div>
+            <label
+              htmlFor="expiresAt"
+              className="block text-sm font-medium text-gray-300 mb-1"
+            >
+              Expiry Date
+            </label>
+            <input
+              type="date"
+              id="expiresAt"
+              name="expiresAt"
+              value={formData.expiresAt}
+              onChange={handleChange}
+              className={`w-full ${errors.expiresAt ? "border-error-500" : ""}`}
+            />
+            {errors.expiresAt && (
+              <p className="text-error-500 text-xs mt-1">{errors.expiresAt}</p>
+            )}
           </div>
         </div>
 
-        <div className="flex justify-end space-x-4">
+        <div className="space-y-4">
+          <div>
+            <label
+              htmlFor="skills"
+              className="block text-sm font-medium text-gray-300 mb-1"
+            >
+              Required Skills (comma separated)
+            </label>
+            <input
+              type="text"
+              id="skills"
+              name="skills"
+              value={formData.skills}
+              onChange={handleChange}
+              className={`w-full ${errors.skills ? "border-error-500" : ""}`}
+              placeholder="e.g. React, JavaScript, CSS"
+            />
+            {errors.skills && (
+              <p className="text-error-500 text-xs mt-1">{errors.skills}</p>
+            )}
+          </div>
+
+          <div>
+            <label
+              htmlFor="description"
+              className="block text-sm font-medium text-gray-300 mb-1"
+            >
+              Job Description
+            </label>
+            <textarea
+              id="description"
+              name="description"
+              value={formData.description}
+              onChange={handleChange}
+              rows="4"
+              className={`w-full ${
+                errors.description ? "border-error-500" : ""
+              }`}
+              placeholder="Describe the job role, responsibilities, and what you're looking for..."
+            ></textarea>
+            {errors.description && (
+              <p className="text-error-500 text-xs mt-1">
+                {errors.description}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label
+              htmlFor="requirements"
+              className="block text-sm font-medium text-gray-300 mb-1"
+            >
+              Requirements (one per line)
+            </label>
+            <textarea
+              id="requirements"
+              name="requirements"
+              value={formData.requirements}
+              onChange={handleChange}
+              rows="5"
+              className={`w-full ${
+                errors.requirements ? "border-error-500" : ""
+              }`}
+              placeholder="e.g. 3+ years of React experience"
+            ></textarea>
+            {errors.requirements && (
+              <p className="text-error-500 text-xs mt-1">
+                {errors.requirements}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Screening Questions Section */}
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-semibold text-white">
+            Screening Questions
+          </h3>
           <button
             type="button"
-            onClick={onCancel}
-            className="px-4 py-2 border border-dark-600 rounded-md text-white hover:bg-background-light transition-colors"
-            disabled={isSubmitting}
+            onClick={addScreeningQuestion}
+            className="btn btn-primary btn-sm"
           >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-md text-white transition-colors flex items-center"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <>
-                <FontAwesomeIcon icon="circle-notch" spin className="mr-2" />
-                {job ? "Updating..." : "Posting..."}
-              </>
-            ) : job ? (
-              "Update Job"
-            ) : (
-              "Post Job"
-            )}
+            <FontAwesomeIcon icon={faPlus} className="mr-2" />
+            Add Question
           </button>
         </div>
-      </form>
-    </div>
+
+        <div className="space-y-4">
+          {formData.screeningQuestions.map((question, index) => (
+            <div
+              key={index}
+              className="bg-background-light p-4 rounded-lg space-y-4"
+            >
+              <div className="flex justify-between items-start">
+                <div className="flex-1 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                      Question Text
+                    </label>
+                    <input
+                      type="text"
+                      value={question.question}
+                      onChange={(e) =>
+                        updateScreeningQuestion(
+                          index,
+                          "question",
+                          e.target.value
+                        )
+                      }
+                      className="input-field w-full"
+                      placeholder="Enter your question..."
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Response Type
+                      </label>
+                      <select
+                        value={question.expectedResponseType}
+                        onChange={(e) =>
+                          updateScreeningQuestion(
+                            index,
+                            "expectedResponseType",
+                            e.target.value
+                          )
+                        }
+                        className="select-field w-full"
+                      >
+                        <option value="text">Short Answer</option>
+                        <option value="multiline">Long Answer</option>
+                        <option value="choice">Multiple Choice</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Weight
+                      </label>
+                      <select
+                        value={question.weight}
+                        onChange={(e) =>
+                          updateScreeningQuestion(
+                            index,
+                            "weight",
+                            parseInt(e.target.value)
+                          )
+                        }
+                        className="select-field w-full"
+                      >
+                        {[1, 2, 3, 4, 5].map((weight) => (
+                          <option key={weight} value={weight}>
+                            {weight}{" "}
+                            {weight === 1
+                              ? "(Low)"
+                              : weight === 5
+                              ? "(High)"
+                              : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {question.expectedResponseType === "choice" && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Choices (one per line)
+                      </label>
+                      <textarea
+                        value={question.choices.join("\n")}
+                        onChange={(e) =>
+                          updateScreeningQuestion(
+                            index,
+                            "choices",
+                            e.target.value.split("\n").filter(Boolean)
+                          )
+                        }
+                        className="input-field w-full min-h-[100px]"
+                        placeholder="Enter choices..."
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={question.required}
+                      onChange={(e) =>
+                        updateScreeningQuestion(
+                          index,
+                          "required",
+                          e.target.checked
+                        )
+                      }
+                      className="mr-2"
+                    />
+                    <label className="text-sm text-gray-300">
+                      Required question
+                    </label>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => removeScreeningQuestion(index)}
+                  className="ml-4 text-error-400 hover:text-error-300 transition-colors"
+                >
+                  <FontAwesomeIcon icon={faTrash} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* LLM Evaluation Settings */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-white">
+          AI Evaluation Settings
+        </h3>
+
+        <div className="flex items-center justify-between bg-background-light p-4 rounded-lg">
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              checked={formData.llmEvaluation.enabled}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  llmEvaluation: {
+                    ...prev.llmEvaluation,
+                    enabled: e.target.checked,
+                  },
+                }))
+              }
+              className="mr-2"
+            />
+            <label className="text-sm text-gray-300">
+              Enable AI-powered response evaluation
+            </label>
+          </div>
+
+          <div className="flex items-center space-x-4">
+            <label className="text-sm text-gray-300">Minimum Confidence:</label>
+            <select
+              value={formData.llmEvaluation.minConfidenceScore}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  llmEvaluation: {
+                    ...prev.llmEvaluation,
+                    minConfidenceScore: parseFloat(e.target.value),
+                  },
+                }))
+              }
+              className="select-field w-32"
+            >
+              <option value={0.6}>60%</option>
+              <option value={0.7}>70%</option>
+              <option value={0.8}>80%</option>
+              <option value={0.9}>90%</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end space-x-4 mt-6">
+        <button type="button" onClick={onCancel} className="btn btn-ghost">
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="btn btn-primary"
+        >
+          {isSubmitting ? "Saving..." : job ? "Update Job" : "Post Job"}
+        </button>
+      </div>
+    </form>
   );
 };
 

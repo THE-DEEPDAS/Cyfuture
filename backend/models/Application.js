@@ -95,6 +95,54 @@ const applicationSchema = new mongoose.Schema(
         },
       },
     ],
+    screeningResponses: [
+      {
+        question: {
+          type: mongoose.Schema.Types.ObjectId,
+          required: true,
+        },
+        response: {
+          type: String,
+          required: true,
+        },
+        llmEvaluation: {
+          score: {
+            type: Number,
+            min: 0,
+            max: 100,
+          },
+          feedback: String,
+          confidence: Number,
+        },
+      },
+    ],
+    overallEvaluation: {
+      totalScore: {
+        type: Number,
+        min: 0,
+        max: 100,
+      },
+      breakdown: {
+        screeningQuestionsScore: Number,
+        resumeMatchScore: Number,
+        llmAnalysisScore: Number,
+      },
+      flags: [
+        {
+          type: String,
+          enum: [
+            "insufficient_experience",
+            "skill_mismatch",
+            "education_mismatch",
+            "low_response_quality",
+          ],
+        },
+      ],
+      recommendationStrength: {
+        type: String,
+        enum: ["strong_yes", "yes", "maybe", "no", "strong_no"],
+      },
+    },
     createdAt: {
       type: Date,
       default: Date.now,

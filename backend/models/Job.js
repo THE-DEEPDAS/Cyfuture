@@ -114,6 +114,60 @@ const jobSchema = new mongoose.Schema(
         type: String,
       },
     ],
+    screeningQuestions: [
+      {
+        question: {
+          type: String,
+          required: true,
+        },
+        expectedResponseType: {
+          type: String,
+          enum: ["text", "multiline", "choice"],
+          default: "text",
+        },
+        choices: [
+          {
+            type: String,
+          },
+        ],
+        weight: {
+          type: Number,
+          default: 1,
+          min: 0,
+          max: 5,
+        },
+        required: {
+          type: Boolean,
+          default: true,
+        },
+      },
+    ],
+    llmEvaluation: {
+      enabled: {
+        type: Boolean,
+        default: true,
+      },
+      minConfidenceScore: {
+        type: Number,
+        default: 0.7,
+        min: 0,
+        max: 1,
+      },
+      evaluationCriteria: [
+        {
+          name: {
+            type: String,
+            required: true,
+          },
+          weight: {
+            type: Number,
+            default: 1,
+            min: 0,
+            max: 5,
+          },
+        },
+      ],
+    },
   },
   {
     timestamps: true,

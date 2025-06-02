@@ -264,33 +264,143 @@ export const localizeJobDescription = async (job, targetLanguage) => {
 };
 
 /**
- * Get full language name from code
- * @param {string} code - ISO 639-1 language code
- * @returns {string} - Full language name
+ * Evaluate a candidate's screening question responses
+ * @param {Object} application - Job application with responses
+ * @param {Object} job - Job posting with questions
+ * @param {string} language - Preferred language for analysis
+ * @returns {Promise<Object>} - Evaluation results for each response
  */
-const getLanguageName = (code) => {
-  const languages = {
-    en: "English",
-    es: "Spanish",
-    fr: "French",
-    de: "German",
-    it: "Italian",
-    pt: "Portuguese",
-    ru: "Russian",
-    zh: "Chinese",
-    ja: "Japanese",
-    ko: "Korean",
-    ar: "Arabic",
-    hi: "Hindi",
-  };
+export const evaluateScreeningResponses = async (
+  application,
+  job,
+  language = "en"
+) => {
+  const template = analysisTemplates[language] || analysisTemplates.en;
+  const results = [];
 
-  return languages[code] || "English";
+  for (const response of application.screeningResponses) {
+    const question = job.screeningQuestions.find(
+      (q) => q._id.toString() === response.question.toString()
+    );
+
+    if (!question) continue;
+
+    const prompt = `
+      As an AI recruiter, evaluate this candidate's response to a job screening question.
+
+      JOB POSITION: ${job.title}
+
+      SCREENING QUESTION: "${question.question}"
+      CANDIDATE'S RESPONSE: "${response.response}"
+
+      Please evaluate the response considering:
+      1. Relevance to the question
+      2. Completeness of the answer
+      3. Professional communication
+      4. Specific examples or details provided
+      5. Alignment with job requirements
+
+      Provide:
+      1. A score from 0-100
+      2. Specific feedback about the response
+      3. Your confidence level in this evaluation (0-1)
+      4. Any red flags or notable strengths
+
+      Format your response as JSON with the following structure:
+      {
+        "score": number,
+        "feedback": "detailed feedback",
+        "confidence": number,
+        "flags": ["flag1", "flag2"],
+        "strengths": ["strength1", "strength2"]
+      }
+    `;
+
+    try {
+      const result = await model.generateContent(prompt);
+      const response = await result.response.text();
+      const evaluation = JSON.parse(response);
+
+      results.push({
+        questionId: question._id,
+        evaluation: {
+          score: evaluation.score,
+          feedback: evaluation.feedback,
+          confidence: evaluation.confidence,
+          flags: evaluation.flags,
+          strengths: evaluation.strengths,
+        },
+      });
+    } catch (error) {
+      console.error(
+        `Error evaluating response for question ${question._id}:`,
+        error
+      );
+      results.push({
+        questionId: question._id,
+        error: "Failed to evaluate response",
+      });
+    }
+  }
+
+  // Calculate overall screening score
+  const validScores = results
+    .filter((r) => r.evaluation?.score)
+    .map((r) => r.evaluation.score);
+
+  const overallScore =
+    validScores.length > 0
+      ? Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length)
+      : 0;
+
+  return {
+    responses: results,
+    overallScore,
+    confidence:
+      results.reduce((acc, r) => acc + (r.evaluation?.confidence || 0), 0) /
+      results.length,
+  };
 };
 
-export default {
-  analyzeCandidate,
-  generateChatResponse,
-  translateText,
-  detectLanguage,
-  localizeJobDescription,
+// Helper function to summarize all evaluations
+export const generateOverallEvaluation = async (application, job) => {
+  const screeningEval = await evaluateScreeningResponses(application, job);
+  const resumeEval = await analyzeCandidate(application, job);
+
+  // Calculate weighted scores
+  const weights = {
+    screening: 0.4,
+    resume: 0.4,
+    llmAnalysis: 0.2,
+  };
+
+  const totalScore = Math.round(
+    screeningEval.overallScore * weights.screening +
+      (application.matchingScores?.total || 0) * weights.resume +
+      resumeEval.confidence * 100 * weights.llmAnalysis
+  );
+
+  // Determine recommendation strength
+  let recommendationStrength = "maybe";
+  if (totalScore >= 85) recommendationStrength = "strong_yes";
+  else if (totalScore >= 70) recommendationStrength = "yes";
+  else if (totalScore <= 30) recommendationStrength = "strong_no";
+  else if (totalScore <= 50) recommendationStrength = "no";
+
+  return {
+    totalScore,
+    breakdown: {
+      screeningQuestionsScore: screeningEval.overallScore,
+      resumeMatchScore: application.matchingScores?.total || 0,
+      llmAnalysisScore: Math.round(resumeEval.confidence * 100),
+    },
+    flags: [
+      ...new Set([
+        ...screeningEval.responses.flatMap((r) => r.evaluation?.flags || []),
+        ...(resumeEval.weaknesses ? ["weak_experience"] : []),
+      ]),
+    ],
+    recommendationStrength,
+    confidence: (screeningEval.confidence + resumeEval.confidence) / 2,
+  };
 };
