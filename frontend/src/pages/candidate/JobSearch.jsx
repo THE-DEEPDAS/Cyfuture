@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import axios from 'axios';
+import { calculateMatchScore, getUserResumeData, getLLMMatchAnalysis } from '../../utils/jobMatching.js';
 
 const JobSearch = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -93,6 +95,51 @@ const JobSearch = () => {
   const [isApplying, setIsApplying] = useState(false);
   const [coverLetter, setCoverLetter] = useState('');
   const [selectedResume, setSelectedResume] = useState('');
+  const [resumeData, setResumeData] = useState(null);
+  const [matchExplanations, setMatchExplanations] = useState({});
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  
+  // Fetch resume data and jobs on component mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoadingJobs(true);
+        
+        // Get resume data
+        const resume = await getUserResumeData();
+        setResumeData(resume);
+        
+        // Fetch jobs from API
+        try {
+          const response = await axios.get('/api/jobs');
+          const jobsData = response.data;
+          
+          // Calculate match scores if we have resume data
+          if (resume) {
+            const jobsWithScores = jobsData.map(job => ({
+              ...job,
+              matchScore: calculateMatchScore(job, resume)
+            }));
+            
+            // Sort by match score (highest first)
+            jobsWithScores.sort((a, b) => b.matchScore - a.matchScore);
+            setJobs(jobsWithScores);
+          } else {
+            setJobs(jobsData);
+          }
+        } catch (error) {
+          console.error('Error fetching jobs:', error);
+          // Keep the sample data if API fails
+        }
+      } catch (error) {
+        console.error('Error initializing job search:', error);
+      } finally {
+        setLoadingJobs(false);
+      }
+    };
+    
+    fetchData();
+  }, []);
   
   // Resumes for the dropdown
   const resumes = [
@@ -124,9 +171,22 @@ const JobSearch = () => {
   };
   
   // Handle job selection
-  const handleJobSelect = (job) => {
+  const handleJobSelect = async (job) => {
     setSelectedJob(job);
     setIsApplying(false);
+    
+    // Get detailed match analysis from LLM if not already cached
+    if (resumeData && !matchExplanations[job.id]) {
+      try {
+        const analysis = await getLLMMatchAnalysis(job, resumeData);
+        setMatchExplanations(prev => ({
+          ...prev,
+          [job.id]: analysis.explanation
+        }));
+      } catch (error) {
+        console.error('Error getting match analysis:', error);
+      }
+    }
   };
   
   // Start application process
@@ -462,6 +522,17 @@ const JobSearch = () => {
                     ))}
                   </div>
                 </div>
+                
+                {/* Match explanation section */}
+                {matchExplanations[selectedJob.id] && (
+                  <div className="mb-6 p-4 border border-primary-700/30 rounded-lg bg-primary-900/20">
+                    <h3 className="text-lg font-medium text-white mb-2 flex items-center">
+                      <FontAwesomeIcon icon="chart-bar" className="text-primary-500 mr-2" />
+                      Match Analysis
+                    </h3>
+                    <p className="text-gray-300">{matchExplanations[selectedJob.id]}</p>
+                  </div>
+                )}
                 
                 <div className="mb-6">
                   <h3 className="text-lg font-medium text-white mb-2">Description</h3>

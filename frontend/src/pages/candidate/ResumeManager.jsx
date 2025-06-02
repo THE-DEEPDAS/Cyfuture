@@ -1,29 +1,51 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 const ResumeManager = () => {
-  const [resumes, setResumes] = useState([
-    {
-      id: '1',
-      title: 'Software Developer Resume',
-      fileUrl: '#',
-      fileType: 'pdf',
-      lastUpdated: '2025-02-15T10:30:00Z',
-      isDefault: true
-    },
-    {
-      id: '2',
-      title: 'Frontend Specialist Resume',
-      fileUrl: '#',
-      fileType: 'docx',
-      lastUpdated: '2025-01-20T14:45:00Z',
-      isDefault: false
-    }
-  ]);
-  
+  const [resumes, setResumes] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const navigate = useNavigate();
+  
+  // Fetch resumes on component mount
+  useEffect(() => {
+    const fetchResumes = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get('/api/resumes');
+        setResumes(response.data);
+      } catch (error) {
+        console.error('Error fetching resumes:', error);
+        // Set sample data for development/demo purposes
+        setResumes([
+          {
+            id: '1',
+            title: 'Software Developer Resume',
+            fileUrl: '#',
+            fileType: 'pdf',
+            lastUpdated: '2025-02-15T10:30:00Z',
+            isDefault: true
+          },
+          {
+            id: '2',
+            title: 'Frontend Specialist Resume',
+            fileUrl: '#',
+            fileType: 'docx',
+            lastUpdated: '2025-01-20T14:45:00Z',
+            isDefault: false
+          }
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchResumes();
+  }, []);
   
   // Format date to readable string
   const formatDate = (dateString) => {
@@ -32,37 +54,79 @@ const ResumeManager = () => {
   };
   
   // Handle resume upload
-  const onDrop = useCallback(acceptedFiles => {
+  const onDrop = useCallback(async (acceptedFiles) => {
     const file = acceptedFiles[0];
     if (!file) return;
     
-    // Simulate file upload with progress
+    // Start upload process
     setUploading(true);
     setUploadProgress(0);
     
-    const interval = setInterval(() => {
-      setUploadProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setUploading(false);
-          
-          // Add the new resume to the list
-          const newResume = {
-            id: Date.now().toString(),
-            title: file.name.replace(/\.[^/.]+$/, ''),
-            fileUrl: '#',
-            fileType: file.name.split('.').pop().toLowerCase(),
-            lastUpdated: new Date().toISOString(),
-            isDefault: false
-          };
-          
-          setResumes(prev => [...prev, newResume]);
-          return 100;
+    try {
+      // Create form data
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('title', file.name.replace(/\.[^/.]+$/, ''));
+      
+      // Set up progress tracking
+      const config = {
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(percentCompleted);
+        },
+        headers: {
+          'Content-Type': 'multipart/form-data'
         }
-        return prev + 10;
-      });
-    }, 300);
-  }, []);
+      };
+      
+      // Simulate delay for development/demo purposes
+      const simulateUpload = async () => {
+        // Simulate upload with intervals
+        let progress = 0;
+        const interval = setInterval(() => {
+          progress += 10;
+          setUploadProgress(progress);
+          if (progress >= 100) {
+            clearInterval(interval);
+            // Add the new resume to the list
+            const newResume = {
+              id: Date.now().toString(),
+              title: file.name.replace(/\.[^/.]+$/, ''),
+              fileUrl: '#',
+              fileType: file.name.split('.').pop().toLowerCase(),
+              lastUpdated: new Date().toISOString(),
+              isDefault: false
+            };
+            
+            setResumes(prev => [...prev, newResume]);
+            setUploading(false);
+            
+            // Navigate to the resume profile page
+            setTimeout(() => {
+              navigate('/candidate/resume-profile');
+            }, 500);
+          }
+        }, 300);
+      };
+      
+      // For development/demo, use simulation instead of actual API call
+      simulateUpload();
+      
+      // Uncomment below for actual API call
+      /*
+      const response = await axios.post('/api/resumes', formData, config);
+      setResumes(prev => [...prev, response.data]);
+      setUploading(false);
+      
+      // Navigate to the profile page to show parsed resume data
+      navigate(`/candidate/resume-profile/${response.data.id}`);
+      */
+    } catch (error) {
+      console.error('Error uploading resume:', error);
+      setUploading(false);
+      alert('Failed to upload resume. Please try again.');
+    }
+  }, [navigate]);
   
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -74,31 +138,62 @@ const ResumeManager = () => {
     maxSize: 5242880, // 5MB
   });
   
-  const handleSetDefault = (id) => {
-    setResumes(
-      resumes.map(resume => ({
-        ...resume,
-        isDefault: resume.id === id
-      }))
-    );
+  const handleSetDefault = async (id) => {
+    try {
+      // For development/demo purposes
+      setResumes(
+        resumes.map(resume => ({
+          ...resume,
+          isDefault: resume.id === id
+        }))
+      );
+      
+      // Uncomment for actual API call
+      // await axios.put(`/api/resumes/${id}/default`);
+    } catch (error) {
+      console.error('Error setting default resume:', error);
+      alert('Failed to set resume as default. Please try again.');
+    }
   };
   
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this resume?')) {
-      setResumes(resumes.filter(resume => resume.id !== id));
+      try {
+        // For development/demo purposes
+        setResumes(resumes.filter(resume => resume.id !== id));
+        
+        // Uncomment for actual API call
+        // await axios.delete(`/api/resumes/${id}`);
+      } catch (error) {
+        console.error('Error deleting resume:', error);
+        alert('Failed to delete resume. Please try again.');
+      }
     }
+  };
+  
+  const handleViewProfile = (id) => {
+    navigate(`/candidate/resume-profile/${id}`);
   };
   
   return (
     <div className="space-y-8">
       {/* Header */}
       <div className="bg-gradient-to-r from-primary-900 to-background-secondary rounded-lg p-6 shadow-custom-dark">
-        <h1 className="text-2xl font-bold text-white mb-2">
-          Resume Manager
-        </h1>
-        <p className="text-gray-300">
-          Upload and manage your resumes for job applications
-        </p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-white mb-2">
+              Resume Manager
+            </h1>
+            <p className="text-gray-300">
+              Upload and manage your resumes for job applications
+            </p>
+          </div>
+          
+          <Link to="/candidate/resume-profile" className="btn-primary">
+            <FontAwesomeIcon icon="chart-line" className="mr-2" />
+            View Resume Profile
+          </Link>
+        </div>
       </div>
       
       {/* Upload area */}
@@ -182,6 +277,14 @@ const ResumeManager = () => {
                     <FontAwesomeIcon icon="star" />
                   </button>
                 )}
+                
+                <button 
+                  onClick={() => handleViewProfile(resume.id)}
+                  className="text-gray-400 hover:text-primary-400 transition-colors"
+                  title="View Resume Profile"
+                >
+                  <FontAwesomeIcon icon="user" />
+                </button>
                 
                 <button 
                   className="text-gray-400 hover:text-primary-400 transition-colors"

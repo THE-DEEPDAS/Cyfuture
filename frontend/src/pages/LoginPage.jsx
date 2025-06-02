@@ -1,50 +1,58 @@
-import React, { useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useAuth } from '../context/AuthContext.jsx';
+import React, { useState } from "react";
+import { Link, Navigate } from "react-router-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const LoginPage = () => {
   const { login, isAuthenticated, user } = useAuth();
   const [formData, setFormData] = useState({
-    email: '',
-    password: '',
+    email: "",
+    password: "",
   });
   const [loading, setLoading] = useState(false);
-  
+
   // Redirect if already logged in
   if (isAuthenticated) {
-    return <Navigate to={user.role === 'candidate' ? '/candidate' : '/company'} />;
+    return (
+      <Navigate to={user.role === "candidate" ? "/candidate" : "/company"} />
+    );
   }
-  
+
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
-  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
       await login(formData);
     } catch (error) {
-      console.error('Login error:', error);
+      console.error("Login error:", error);
     } finally {
       setLoading(false);
     }
   };
-  
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background-primary py-12 px-4 sm:px-6 lg:px-8">
       <div className="card max-w-md w-full space-y-8 slide-up">
         <div>
           <div className="flex justify-center">
-            <FontAwesomeIcon icon="briefcase" className="text-primary-500 text-4xl" />
+            <FontAwesomeIcon
+              icon="briefcase"
+              className="text-primary-500 text-4xl"
+            />
           </div>
           <h2 className="mt-6 text-center text-3xl font-bold text-white">
             Sign in to your account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-300">
-            Or{' '}
-            <Link to="/register" className="font-medium text-primary-500 hover:text-primary-400">
+            Or{" "}
+            <Link
+              to="/register"
+              className="font-medium text-primary-500 hover:text-primary-400"
+            >
               create a new account
             </Link>
           </p>
@@ -52,7 +60,10 @@ const LoginPage = () => {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-300">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-300"
+              >
                 Email address
               </label>
               <input
@@ -68,7 +79,10 @@ const LoginPage = () => {
               />
             </div>
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-300">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-300"
+              >
                 Password
               </label>
               <input
@@ -84,7 +98,7 @@ const LoginPage = () => {
               />
             </div>
           </div>
-          
+
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <input
@@ -93,18 +107,24 @@ const LoginPage = () => {
                 type="checkbox"
                 className="h-4 w-4 rounded border-gray-600 bg-background-secondary text-primary-600 focus:ring-primary-500"
               />
-              <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-300">
+              <label
+                htmlFor="remember-me"
+                className="ml-2 block text-sm text-gray-300"
+              >
                 Remember me
               </label>
             </div>
-            
+
             <div className="text-sm">
-              <a href="#" className="font-medium text-primary-500 hover:text-primary-400">
+              <a
+                href="#"
+                className="font-medium text-primary-500 hover:text-primary-400"
+              >
                 Forgot your password?
               </a>
             </div>
           </div>
-          
+
           <button
             type="submit"
             disabled={loading}
@@ -112,47 +132,13 @@ const LoginPage = () => {
           >
             {loading ? (
               <>
-                <FontAwesomeIcon icon="spinner\" spin className="mr-2" />
+                <FontAwesomeIcon icon="spinner" spin className="mr-2" />
                 Signing in...
               </>
             ) : (
-              'Sign in'
+              "Sign in"
             )}
           </button>
-          
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-dark-600"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-background-secondary text-gray-400">
-                  Or continue with
-                </span>
-              </div>
-            </div>
-            
-            <div className="mt-6 grid grid-cols-3 gap-3">
-              <button
-                type="button"
-                className="w-full inline-flex justify-center py-2 px-4 border border-dark-600 rounded-md shadow-sm bg-background-secondary text-gray-300 hover:bg-background-light transition-colors"
-              >
-                <FontAwesomeIcon icon={['fab', 'google']} />
-              </button>
-              <button
-                type="button"
-                className="w-full inline-flex justify-center py-2 px-4 border border-dark-600 rounded-md shadow-sm bg-background-secondary text-gray-300 hover:bg-background-light transition-colors"
-              >
-                <FontAwesomeIcon icon={['fab', 'linkedin']} />
-              </button>
-              <button
-                type="button"
-                className="w-full inline-flex justify-center py-2 px-4 border border-dark-600 rounded-md shadow-sm bg-background-secondary text-gray-300 hover:bg-background-light transition-colors"
-              >
-                <FontAwesomeIcon icon={['fab', 'github']} />
-              </button>
-            </div>
-          </div>
         </form>
       </div>
     </div>

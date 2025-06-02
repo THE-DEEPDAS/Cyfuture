@@ -1,80 +1,87 @@
-import React, { useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useAuth } from '../context/AuthContext.jsx';
+import React, { useState } from "react";
+import { Link, Navigate } from "react-router-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const RegisterPage = () => {
   const { register, isAuthenticated, user } = useAuth();
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    role: '',
-    companyName: '',
-    industry: '',
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    role: "",
+    companyName: "",
+    industry: "",
   });
   const [loading, setLoading] = useState(false);
-  
+
   // Redirect if already logged in
   if (isAuthenticated) {
-    return <Navigate to={user.role === 'candidate' ? '/candidate' : '/company'} />;
+    return (
+      <Navigate to={user.role === "candidate" ? "/candidate" : "/company"} />
+    );
   }
-  
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
-  
+
   const validateStep1 = () => {
     return (
-      formData.name.trim() !== '' && 
-      formData.email.trim() !== '' && 
-      formData.password.trim() !== '' && 
+      formData.name.trim() !== "" &&
+      formData.email.trim() !== "" &&
+      formData.password.trim() !== "" &&
       formData.password === formData.confirmPassword
     );
   };
-  
+
   const handleNext = () => {
     if (validateStep1()) {
       setStep(2);
     }
   };
-  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if ((formData.role === 'company' && !formData.companyName) || 
-        !formData.role) {
+
+    if (
+      (formData.role === "company" && !formData.companyName) ||
+      !formData.role
+    ) {
       return;
     }
-    
+
     const registrationData = {
       name: formData.name,
       email: formData.email,
       password: formData.password,
       role: formData.role,
-      ...(formData.role === 'company' && { 
+      ...(formData.role === "company" && {
         companyName: formData.companyName,
-        industry: formData.industry 
-      })
+        industry: formData.industry,
+      }),
     };
-    
+
     setLoading(true);
     try {
       await register(registrationData);
     } catch (error) {
-      console.error('Registration error:', error);
+      console.error("Registration error:", error);
     } finally {
       setLoading(false);
     }
   };
-  
+
   const renderStep1 = () => (
     <>
       <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-300">
+        <label
+          htmlFor="name"
+          className="block text-sm font-medium text-gray-300"
+        >
           Full Name
         </label>
         <input
@@ -89,9 +96,12 @@ const RegisterPage = () => {
           placeholder="John Doe"
         />
       </div>
-      
+
       <div>
-        <label htmlFor="email" className="block text-sm font-medium text-gray-300">
+        <label
+          htmlFor="email"
+          className="block text-sm font-medium text-gray-300"
+        >
           Email address
         </label>
         <input
@@ -106,9 +116,12 @@ const RegisterPage = () => {
           placeholder="you@example.com"
         />
       </div>
-      
+
       <div>
-        <label htmlFor="password" className="block text-sm font-medium text-gray-300">
+        <label
+          htmlFor="password"
+          className="block text-sm font-medium text-gray-300"
+        >
           Password
         </label>
         <input
@@ -123,9 +136,12 @@ const RegisterPage = () => {
           placeholder="••••••••"
         />
       </div>
-      
+
       <div>
-        <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300">
+        <label
+          htmlFor="confirmPassword"
+          className="block text-sm font-medium text-gray-300"
+        >
           Confirm Password
         </label>
         <input
@@ -138,11 +154,15 @@ const RegisterPage = () => {
           className="w-full mt-1"
           placeholder="••••••••"
         />
-        {formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword && (
-          <p className="mt-1 text-sm text-error-500">Passwords do not match</p>
-        )}
+        {formData.password &&
+          formData.confirmPassword &&
+          formData.password !== formData.confirmPassword && (
+            <p className="mt-1 text-sm text-error-500">
+              Passwords do not match
+            </p>
+          )}
       </div>
-      
+
       <button
         type="button"
         onClick={handleNext}
@@ -153,7 +173,7 @@ const RegisterPage = () => {
       </button>
     </>
   );
-  
+
   const renderStep2 = () => (
     <>
       <div>
@@ -164,41 +184,56 @@ const RegisterPage = () => {
           <button
             type="button"
             className={`p-4 rounded-lg border ${
-              formData.role === 'candidate'
-                ? 'border-primary-500 bg-primary-700/20'
-                : 'border-dark-600 hover:border-primary-400'
+              formData.role === "candidate"
+                ? "border-primary-500 bg-primary-700/20"
+                : "border-dark-600 hover:border-primary-400"
             } transition-colors flex flex-col items-center justify-center`}
-            onClick={() => handleChange({ target: { name: 'role', value: 'candidate' } })}
+            onClick={() =>
+              handleChange({ target: { name: "role", value: "candidate" } })
+            }
           >
-            <FontAwesomeIcon 
-              icon="user" 
-              className={`text-2xl ${formData.role === 'candidate' ? 'text-primary-400' : 'text-gray-400'}`} 
+            <FontAwesomeIcon
+              icon="user"
+              className={`text-2xl ${
+                formData.role === "candidate"
+                  ? "text-primary-400"
+                  : "text-gray-400"
+              }`}
             />
             <span className="mt-2">Job Seeker</span>
           </button>
-          
+
           <button
             type="button"
             className={`p-4 rounded-lg border ${
-              formData.role === 'company'
-                ? 'border-primary-500 bg-primary-700/20'
-                : 'border-dark-600 hover:border-primary-400'
+              formData.role === "company"
+                ? "border-primary-500 bg-primary-700/20"
+                : "border-dark-600 hover:border-primary-400"
             } transition-colors flex flex-col items-center justify-center`}
-            onClick={() => handleChange({ target: { name: 'role', value: 'company' } })}
+            onClick={() =>
+              handleChange({ target: { name: "role", value: "company" } })
+            }
           >
-            <FontAwesomeIcon 
-              icon="building" 
-              className={`text-2xl ${formData.role === 'company' ? 'text-primary-400' : 'text-gray-400'}`} 
+            <FontAwesomeIcon
+              icon="building"
+              className={`text-2xl ${
+                formData.role === "company"
+                  ? "text-primary-400"
+                  : "text-gray-400"
+              }`}
             />
             <span className="mt-2">Employer</span>
           </button>
         </div>
       </div>
-      
-      {formData.role === 'company' && (
+
+      {formData.role === "company" && (
         <>
           <div>
-            <label htmlFor="companyName" className="block text-sm font-medium text-gray-300">
+            <label
+              htmlFor="companyName"
+              className="block text-sm font-medium text-gray-300"
+            >
               Company Name
             </label>
             <input
@@ -212,9 +247,12 @@ const RegisterPage = () => {
               placeholder="Acme Corporation"
             />
           </div>
-          
+
           <div>
-            <label htmlFor="industry" className="block text-sm font-medium text-gray-300">
+            <label
+              htmlFor="industry"
+              className="block text-sm font-medium text-gray-300"
+            >
               Industry
             </label>
             <select
@@ -237,7 +275,7 @@ const RegisterPage = () => {
           </div>
         </>
       )}
-      
+
       <div className="flex space-x-4">
         <button
           type="button"
@@ -246,53 +284,71 @@ const RegisterPage = () => {
         >
           Back
         </button>
-        
+
         <button
           type="submit"
-          disabled={loading || (formData.role === 'company' && !formData.companyName) || !formData.role}
+          disabled={
+            loading ||
+            (formData.role === "company" && !formData.companyName) ||
+            !formData.role
+          }
           className="flex-1 flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:bg-primary-800 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? (
             <>
-              <FontAwesomeIcon icon="spinner\" spin className="mr-2" />
+              <FontAwesomeIcon icon="spinner" spin className="mr-2" />
               Creating Account...
             </>
           ) : (
-            'Create Account'
+            "Create Account"
           )}
         </button>
       </div>
     </>
   );
-  
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background-primary py-12 px-4 sm:px-6 lg:px-8">
       <div className="card max-w-md w-full space-y-8 slide-up">
         <div>
           <div className="flex justify-center">
-            <FontAwesomeIcon icon="briefcase" className="text-primary-500 text-4xl" />
+            <FontAwesomeIcon
+              icon="briefcase"
+              className="text-primary-500 text-4xl"
+            />
           </div>
           <h2 className="mt-6 text-center text-3xl font-bold text-white">
-            {step === 1 ? 'Create your account' : 'Complete your profile'}
+            {step === 1 ? "Create your account" : "Complete your profile"}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-300">
-            Already have an account?{' '}
-            <Link to="/login" className="font-medium text-primary-500 hover:text-primary-400">
+            Already have an account?{" "}
+            <Link
+              to="/login"
+              className="font-medium text-primary-500 hover:text-primary-400"
+            >
               Sign in
             </Link>
           </p>
         </div>
-        
+
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             {step === 1 ? renderStep1() : renderStep2()}
           </div>
         </form>
-        
+
         {/* Step indicator */}
         <div className="flex justify-center items-center space-x-2 pt-4">
-          <div className={`h-2 w-8 rounded-full ${step === 1 ? 'bg-primary-500' : 'bg-primary-800'}`}></div>
-          <div className={`h-2 w-8 rounded-full ${step === 2 ? 'bg-primary-500' : 'bg-primary-800'}`}></div>
+          <div
+            className={`h-2 w-8 rounded-full ${
+              step === 1 ? "bg-primary-500" : "bg-primary-800"
+            }`}
+          ></div>
+          <div
+            className={`h-2 w-8 rounded-full ${
+              step === 2 ? "bg-primary-500" : "bg-primary-800"
+            }`}
+          ></div>
         </div>
       </div>
     </div>

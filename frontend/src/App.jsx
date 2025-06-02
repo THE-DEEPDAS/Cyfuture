@@ -16,6 +16,7 @@ import RegisterPage from './pages/RegisterPage.jsx';
 import CandidateDashboard from './pages/candidate/Dashboard.jsx';
 import JobSearch from './pages/candidate/JobSearch.jsx';
 import ResumeManager from './pages/candidate/ResumeManager.jsx';
+import ResumeProfile from './pages/candidate/ResumeProfile.jsx';
 import CompanyDashboard from './pages/company/Dashboard.jsx';
 import JobPostings from './pages/company/JobPostings.jsx';
 import CandidateReview from './pages/company/CandidateReview.jsx';
@@ -42,6 +43,8 @@ function App() {
             <Route path="/candidate" element={<CandidateDashboard />} />
             <Route path="/candidate/jobs" element={<JobSearch />} />
             <Route path="/candidate/resume" element={<ResumeManager />} />
+            <Route path="/candidate/resume-profile" element={<ResumeProfile />} />
+            <Route path="/candidate/resume-profile/:resumeId" element={<ResumeProfile />} />
           </Route>
         </Route>
         
