@@ -533,3 +533,296 @@ export const sendMessageToAllApplicants = asyncHandler(async (req, res) => {
     count: applications.length,
   });
 });
+
+// @desc    Toggle shortlist status for an application
+// @route   PUT /api/applications/:id/shortlist
+// @access  Private/Company
+export const toggleShortlist = asyncHandler(async (req, res) => {
+  const application = await Application.findById(req.params.id)
+    .populate("job")
+    .populate("candidate");
+
+  if (!application) {
+    res.status(404);
+    throw new Error("Application not found");
+  }
+
+  // Verify the company owns this job
+  if (application.job.company.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Not authorized to modify this application");
+  }
+
+  application.shortlisted = !application.shortlisted;
+  await application.save();
+
+  // Send notification to candidate
+  if (application.shortlisted) {
+    await notifyUser(application.candidate._id, {
+      title: "Application Shortlisted",
+      message: `Your application for ${application.job.title} has been shortlisted!`,
+      type: "application_shortlisted",
+      link: `/applications/${application._id}`,
+    });
+  }
+
+  res.json({ shortlisted: application.shortlisted });
+});
+
+// @desc    Get applications for a specific job with matching scores and LLM analysis
+// @route   GET /api/applications/job/:jobId
+// @access  Private/Company
+export const getJobApplications = asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+
+  // Find job and verify ownership
+  const job = await Job.findById(jobId);
+  if (!job || job.company.toString() !== req.user._id.toString()) {
+    res.status(404);
+    throw new Error("Job not found");
+  }
+
+  // Get all applications for this job
+  const applications = await Application.find({ job: jobId })
+    .populate("candidate", "name email phone")
+    .populate("resume")
+    .sort("-createdAt");
+
+  // Calculate matching scores and get LLM analysis for each application
+  const matchingScores = {};
+  const llmExplanations = {};
+  const shortlistedCandidates = [];
+
+  for (const application of applications) {
+    // Calculate matching score based on skills, experience, etc.
+    const score = await calculateMatchingScore(
+      application.resume.parsedData,
+      job.requirements
+    );
+    matchingScores[application._id] = score;
+
+    // Get LLM analysis if not already stored
+    if (!application.llmAnalysis) {
+      const analysis = await analyzeCandidate({
+        resume: application.resume.parsedData,
+        jobDescription: job.description,
+        requirements: job.requirements,
+      });
+
+      application.llmAnalysis = analysis;
+      await application.save();
+    }
+
+    llmExplanations[application._id] = application.llmAnalysis;
+
+    if (application.shortlisted) {
+      shortlistedCandidates.push(application._id);
+    }
+  }
+
+  res.json({
+    applications,
+    matchingScores,
+    llmExplanations,
+    shortlistedCandidates,
+  });
+});
+
+// Calculate matching score between resume and job requirements
+const calculateMatchingScore = async (resumeData, jobRequirements) => {
+  let score = 0;
+  const weights = {
+    skills: 0.4,
+    experience: 0.3,
+    education: 0.2,
+    projects: 0.1,
+  };
+
+  // Skills match
+  const requiredSkills = new Set(
+    jobRequirements.skills.map((s) => s.toLowerCase())
+  );
+  const candidateSkills = new Set(
+    resumeData.skills.map((s) => s.toLowerCase())
+  );
+  const skillsMatch =
+    Array.from(requiredSkills).filter((skill) => candidateSkills.has(skill))
+      .length / requiredSkills.size;
+
+  // Experience match (years)
+  const experienceMatch = Math.min(
+    resumeData.experience.length / jobRequirements.minExperience,
+    1
+  );
+
+  // Education match
+  const educationMatch = resumeData.education.some((edu) =>
+    edu.degree
+      ?.toLowerCase()
+      .includes(jobRequirements.preferredDegree?.toLowerCase() || "")
+  )
+    ? 1
+    : 0.5;
+
+  // Project match (based on relevant keywords)
+  const projectKeywords = jobRequirements.skills.map((s) => s.toLowerCase());
+  const projectMatches = resumeData.projects.filter((project) =>
+    projectKeywords.some((keyword) =>
+      project.description?.toLowerCase().includes(keyword)
+    )
+  ).length;
+  const projectMatch = Math.min(projectMatches / 2, 1); // Normalize to max of 1
+
+  score =
+    weights.skills * skillsMatch +
+    weights.experience * experienceMatch +
+    weights.education * educationMatch +
+    weights.projects * projectMatch;
+
+  return Math.min(Math.max(score, 0), 1); // Ensure score is between 0 and 1
+};
+
+/**
+ * @desc    Shortlist a candidate
+ * @route   POST /api/applications/:id/shortlist
+ * @access  Private/Company
+ */
+export const shortlistCandidate = asyncHandler(async (req, res) => {
+  const application = await Application.findById(req.params.id);
+
+  if (!application) {
+    res.status(404);
+    throw new Error("Application not found");
+  }
+
+  // Check if the job belongs to the company
+  const job = await Job.findById(application.job);
+  if (job.company.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Not authorized to shortlist candidates for this job");
+  }
+
+  application.isShortlisted = true;
+  await application.save();
+
+  // Send notification to candidate
+  await createNotification({
+    user: application.candidate,
+    type: "APPLICATION_SHORTLISTED",
+    title: "Application Shortlisted",
+    message: `Your application for ${job.title} has been shortlisted!`,
+    reference: {
+      type: "Application",
+      id: application._id,
+    },
+  });
+
+  res.json({ message: "Candidate shortlisted successfully" });
+});
+
+/**
+ * @desc    Remove candidate from shortlist
+ * @route   DELETE /api/applications/:id/shortlist
+ * @access  Private/Company
+ */
+export const removeFromShortlist = asyncHandler(async (req, res) => {
+  const application = await Application.findById(req.params.id);
+
+  if (!application) {
+    res.status(404);
+    throw new Error("Application not found");
+  }
+
+  // Check if the job belongs to the company
+  const job = await Job.findById(application.job);
+  if (job.company.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Not authorized to modify shortlist for this job");
+  }
+
+  application.isShortlisted = false;
+  await application.save();
+
+  res.json({ message: "Candidate removed from shortlist successfully" });
+});
+
+/**
+ * @desc    Get LLM analysis for job applications
+ * @route   GET /api/applications/job/:jobId/llm-analysis
+ * @access  Private/Company
+ */
+export const getLLMAnalysis = asyncHandler(async (req, res) => {
+  const jobId = req.params.jobId;
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    res.status(404);
+    throw new Error("Job not found");
+  }
+
+  if (job.company.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Not authorized to view analysis for this job");
+  }
+
+  const applications = await Application.find({ job: jobId })
+    .populate("candidate", "name")
+    .populate("resume");
+
+  const explanations = {};
+
+  // Get LLM analysis for each application if not already present
+  for (const application of applications) {
+    if (!application.llmAnalysis?.explanation) {
+      // This would be implemented in the LLM service
+      const analysis = await analyzeCandidateWithLLM(application, job);
+
+      application.llmAnalysis = {
+        explanation: analysis.explanation,
+        language: analysis.language,
+        confidence: analysis.confidence,
+      };
+      await application.save();
+    }
+
+    explanations[application._id] = application.llmAnalysis.explanation;
+  }
+
+  res.json({ explanations });
+});
+
+/**
+ * @desc    Get matching scores for job applications
+ * @route   GET /api/applications/job/:jobId/matching-scores
+ * @access  Private/Company
+ */
+export const getMatchingScores = asyncHandler(async (req, res) => {
+  const jobId = req.params.jobId;
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    res.status(404);
+    throw new Error("Job not found");
+  }
+
+  if (job.company.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Not authorized to view scores for this job");
+  }
+
+  const applications = await Application.find({ job: jobId });
+  const scores = {};
+
+  for (const application of applications) {
+    if (!application.matchingScores) {
+      // Calculate scores if not already present
+      const calculatedScores = await calculateMatchingScores(application, job);
+      application.matchingScores = calculatedScores;
+      await application.save();
+    }
+
+    scores[application._id] = application.matchingScores;
+  }
+
+  res.json({ scores });
+});

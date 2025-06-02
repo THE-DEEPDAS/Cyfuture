@@ -1,99 +1,156 @@
 import { analyzeCandidate } from "./llm.js";
 
-/**
- * Calculate match score between a job and a candidate's resume
- * @param {Object} job - Job posting data with requirements
- * @param {Object} resumeData - Parsed resume data with skills, experience, etc.
- * @returns {number} - Match score percentage (0-100)
- */
-export const calculateMatchScore = (job, resumeData) => {
-  if (!job || !resumeData) return 0;
+const WEIGHTS = {
+  skills: 0.4,
+  experience: 0.3,
+  education: 0.2,
+  projects: 0.1,
+};
 
-  // Get candidate skills (case-insensitive)
-  const candidateSkills = (resumeData.skills || []).map((skill) =>
-    skill.toLowerCase()
+/**
+ * Calculate detailed matching scores between a job and a candidate's resume
+ * @param {Object} job - Job posting data
+ * @param {Object} resumeData - Parsed resume data
+ * @returns {Object} - Detailed matching scores
+ */
+export const calculateDetailedMatchScore = (job, resumeData) => {
+  const scores = {
+    skills: calculateSkillsMatch(job.requiredSkills, resumeData.skills),
+    experience: calculateExperienceMatch(
+      job.requirements?.experience,
+      resumeData.experience
+    ),
+    education: calculateEducationMatch(
+      job.requirements?.education,
+      resumeData.education
+    ),
+    projects: calculateProjectsMatch(
+      job.requirements?.projectCount,
+      resumeData.projects
+    ),
+    total: 0,
+  };
+
+  // Calculate weighted total score
+  scores.total = Math.round(
+    scores.skills * WEIGHTS.skills +
+      scores.experience * WEIGHTS.experience +
+      scores.education * WEIGHTS.education +
+      scores.projects * WEIGHTS.projects
   );
 
-  // Get job required skills (case-insensitive)
-  const jobSkills = (job.skills || []).map((skill) => skill.toLowerCase());
+  return scores;
+};
 
-  // Match skills
-  let skillMatchCount = 0;
-  for (const jobSkill of jobSkills) {
+/**
+ * Calculate skills match score
+ * @param {Array} requiredSkills - Required skills from job posting
+ * @param {Array} candidateSkills - Candidate's skills from resume
+ * @returns {number} - Match percentage (0-100)
+ */
+const calculateSkillsMatch = (requiredSkills = [], candidateSkills = []) => {
+  if (!requiredSkills.length) return 100;
+
+  const normalizedRequired = requiredSkills.map((s) => s.toLowerCase());
+  const normalizedCandidate = candidateSkills.map((s) => s.toLowerCase());
+
+  let matches = 0;
+  for (const skill of normalizedRequired) {
     if (
-      candidateSkills.some(
-        (skill) => skill.includes(jobSkill) || jobSkill.includes(skill)
-      )
+      normalizedCandidate.some((s) => s.includes(skill) || skill.includes(s))
     ) {
-      skillMatchCount++;
+      matches++;
     }
   }
 
-  // Calculate skill match percentage
-  const skillMatchPercentage =
-    jobSkills.length > 0 ? (skillMatchCount / jobSkills.length) * 100 : 0;
+  return Math.round((matches / normalizedRequired.length) * 100);
+};
 
-  // Experience level match (Junior, Mid-Level, Senior)
-  let experienceMatch = 0;
-  const jobExperience = job.experience ? job.experience.toLowerCase() : "";
+/**
+ * Calculate experience match score
+ * @param {number} requiredYears - Required years of experience
+ * @param {Array} experiences - Candidate's experience entries
+ * @returns {number} - Match percentage (0-100)
+ */
+const calculateExperienceMatch = (requiredYears = 0, experiences = []) => {
+  if (!requiredYears) return 100;
 
-  // Check candidate experience based on years or positions
-  if (resumeData.experience && resumeData.experience.length > 0) {
-    const candidateExperiences = resumeData.experience;
-    const seniorTitles = [
-      "senior",
-      "lead",
-      "principal",
-      "architect",
-      "manager",
-      "head",
-    ];
-    const midTitles = ["mid", "intermediate", "developer", "engineer"];
-    const juniorTitles = ["junior", "entry", "associate", "intern"];
+  const totalYears = experiences.reduce((total, exp) => {
+    const startDate = new Date(exp.startDate);
+    const endDate = exp.endDate ? new Date(exp.endDate) : new Date();
+    const years = (endDate - startDate) / (1000 * 60 * 60 * 24 * 365);
+    return total + years;
+  }, 0);
 
-    // Determine candidate's highest experience level
-    let candidateLevel = "junior";
+  const matchPercentage = (totalYears / requiredYears) * 100;
+  return Math.round(Math.min(matchPercentage, 100));
+};
 
-    for (const exp of candidateExperiences) {
-      const title = exp.title ? exp.title.toLowerCase() : "";
-      if (seniorTitles.some((term) => title.includes(term))) {
-        candidateLevel = "senior";
-        break;
-      } else if (midTitles.some((term) => title.includes(term))) {
-        candidateLevel = "mid-level";
+/**
+ * Calculate education match score
+ * @param {Object} requiredEducation - Required education level and field
+ * @param {Array} educationHistory - Candidate's education entries
+ * @returns {number} - Match percentage (0-100)
+ */
+const calculateEducationMatch = (
+  requiredEducation = {},
+  educationHistory = []
+) => {
+  if (!requiredEducation.level) return 100;
+
+  const educationLevels = {
+    "high school": 1,
+    associate: 2,
+    bachelor: 3,
+    master: 4,
+    doctorate: 5,
+  };
+
+  const requiredLevel =
+    educationLevels[requiredEducation.level.toLowerCase()] || 1;
+
+  let highestLevel = 0;
+  let fieldMatch = false;
+
+  for (const edu of educationHistory) {
+    const level = Object.entries(educationLevels).find(([key]) =>
+      edu.degree?.toLowerCase().includes(key)
+    );
+
+    if (level) {
+      highestLevel = Math.max(highestLevel, level[1]);
+    }
+
+    if (requiredEducation.field && edu.field) {
+      if (
+        edu.field.toLowerCase().includes(requiredEducation.field.toLowerCase())
+      ) {
+        fieldMatch = true;
       }
     }
-
-    // Match experience level
-    if (jobExperience.includes("senior") && candidateLevel === "senior") {
-      experienceMatch = 100;
-    } else if (
-      jobExperience.includes("mid") &&
-      (candidateLevel === "mid-level" || candidateLevel === "senior")
-    ) {
-      experienceMatch = 100;
-    } else if (jobExperience.includes("junior") && candidateLevel !== "") {
-      experienceMatch = 100;
-    } else if (candidateLevel === "senior") {
-      experienceMatch = 75; // Senior candidates can do mid/junior roles
-    } else if (
-      candidateLevel === "mid-level" &&
-      jobExperience.includes("junior")
-    ) {
-      experienceMatch = 75; // Mid-level can do junior roles
-    } else {
-      experienceMatch = 25; // Experience mismatch
-    }
   }
 
-  // Calculate overall match score (weighted)
-  const skillWeight = 0.7;
-  const experienceWeight = 0.3;
+  let score =
+    highestLevel >= requiredLevel ? 100 : (highestLevel / requiredLevel) * 100;
 
-  const overallScore =
-    skillMatchPercentage * skillWeight + experienceMatch * experienceWeight;
+  if (requiredEducation.field && !fieldMatch) {
+    score *= 0.7; // Reduce score if field doesn't match
+  }
 
-  return Math.round(overallScore);
+  return Math.round(score);
+};
+
+/**
+ * Calculate projects match score
+ * @param {number} requiredCount - Required number of projects
+ * @param {Array} projects - Candidate's projects
+ * @returns {number} - Match percentage (0-100)
+ */
+const calculateProjectsMatch = (requiredCount = 0, projects = []) => {
+  if (!requiredCount) return 100;
+
+  const matchPercentage = (projects.length / requiredCount) * 100;
+  return Math.round(Math.min(matchPercentage, 100));
 };
 
 /**
@@ -155,4 +212,41 @@ export const matchJobWithResume = async (job, resumeData, threshold = 70) => {
       llmRationale: `Algorithmic match score: ${algorithmicScore}%. (LLM analysis failed)`,
     };
   }
+};
+
+/**
+ * Get shortlisted candidates based on threshold and limit
+ * @param {Array} applications - List of job applications
+ * @param {Object} job - Job posting data
+ * @param {number} threshold - Minimum score threshold (0-100)
+ * @param {number} limit - Maximum number of candidates to shortlist
+ * @returns {Array} - Sorted and filtered applications
+ */
+export const getShortlistedCandidates = async (
+  applications,
+  job,
+  threshold = 70,
+  limit = 10
+) => {
+  const scored = await Promise.all(
+    applications.map(async (application) => {
+      const scores = calculateDetailedMatchScore(
+        job,
+        application.resume.parsedData
+      );
+      const llmAnalysis = await analyzeCandidate(application, job);
+
+      return {
+        ...application.toObject(),
+        scores,
+        llmAnalysis,
+      };
+    })
+  );
+
+  // Filter by threshold and sort by total score
+  return scored
+    .filter((app) => app.scores.total >= threshold)
+    .sort((a, b) => b.scores.total - a.scores.total)
+    .slice(0, limit);
 };

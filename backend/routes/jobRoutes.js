@@ -11,7 +11,7 @@ import {
   updateJob,
   deleteJob,
   getCompanyJobs,
-  applyForJob,
+  matchCandidates,
 } from "../controllers/jobController.js";
 
 const router = express.Router();
@@ -46,9 +46,9 @@ router.put("/:id", protect, companyOnly, updateJob);
 // @access  Private
 router.delete("/:id", protect, companyOnly, deleteJob);
 
-// @desc    Apply for a job
-// @route   POST /api/jobs/:id/apply
+// @desc    Match candidates to a job
+// @route   POST /api/jobs/:id/match
 // @access  Private
-router.post("/:id/apply", protect, candidate, applyForJob);
+router.post("/:id/match", protect, companyOnly, matchCandidates);
 
 export default router;

@@ -25,10 +25,28 @@ const applicationSchema = new mongoose.Schema(
       enum: ["pending", "reviewing", "shortlisted", "rejected", "hired"],
       default: "pending",
     },
+    shortlisted: {
+      type: Boolean,
+      default: false,
+    },
+    isShortlisted: {
+      type: Boolean,
+      default: false,
+    },
     matchScore: {
       type: Number,
       min: 0,
       max: 100,
+    },
+    matchingScores: {
+      skills: Number,
+      experience: Number,
+      total: Number,
+    },
+    llmAnalysis: {
+      explanation: String,
+      language: String,
+      confidence: Number,
     },
     llmRationale: {
       type: String,

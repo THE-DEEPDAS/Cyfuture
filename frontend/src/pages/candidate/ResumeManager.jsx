@@ -47,15 +47,14 @@ const ResumeManager = () => {
       setUploadProgress(0);
 
       // First upload to Cloudinary
-      const cloudinaryResponse = await uploadToCloudinary(file, (progress) => {
-        setUploadProgress(progress);
-      });
+      const cloudinaryUrl = await uploadToCloudinary(file);
+      setUploadProgress(100);
 
       // Then send to our backend
       const formData = new FormData();
       formData.append("file", file);
       formData.append("title", file.name.split(".")[0]);
-      formData.append("cloudinaryUrl", cloudinaryResponse.secure_url);
+      formData.append("cloudinaryUrl", cloudinaryUrl);
 
       const response = await api.post("/api/resumes", formData, {
         headers: {

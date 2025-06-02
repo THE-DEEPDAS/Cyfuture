@@ -13,6 +13,10 @@ import {
   updateApplicationStatus,
   sendMessage,
   sendMessageToAllApplicants,
+  shortlistCandidate,
+  removeFromShortlist,
+  getLLMAnalysis,
+  getMatchingScores,
 } from "../controllers/applicationController.js";
 
 const router = express.Router();
@@ -35,6 +39,12 @@ router.get("/:id", protect, getApplicationById);
 // @route   PUT /api/applications/:id/status
 router.put("/:id/status", protect, companyOnly, updateApplicationStatus);
 
+// @route   POST /api/applications/:id/shortlist
+router.post("/:id/shortlist", protect, companyOnly, shortlistCandidate);
+
+// @route   DELETE /api/applications/:id/shortlist
+router.delete("/:id/shortlist", protect, companyOnly, removeFromShortlist);
+
 // @route   POST /api/applications/:id/messages
 router.post("/:id/messages", protect, sendMessage);
 
@@ -44,6 +54,17 @@ router.post(
   protect,
   companyOnly,
   sendMessageToAllApplicants
+);
+
+// @route   GET /api/applications/job/:jobId/llm-analysis
+router.get("/job/:jobId/llm-analysis", protect, companyOnly, getLLMAnalysis);
+
+// @route   GET /api/applications/job/:jobId/matching-scores
+router.get(
+  "/job/:jobId/matching-scores",
+  protect,
+  companyOnly,
+  getMatchingScores
 );
 
 export default router;

@@ -4,151 +4,154 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
+// Language-specific analysis templates
+const analysisTemplates = {
+  en: {
+    instruction: "Analyze this candidate's fit for the job position",
+    strengthsLabel: "Key Strengths",
+    weaknessesLabel: "Areas for Improvement",
+    fitLabel: "Overall Fit",
+    recommendationLabel: "Recommendation",
+  },
+  es: {
+    instruction: "Analiza la idoneidad de este candidato para el puesto",
+    strengthsLabel: "Puntos Fuertes",
+    weaknessesLabel: "Áreas de Mejora",
+    fitLabel: "Ajuste General",
+    recommendationLabel: "Recomendación",
+  },
+  // Add more languages as needed
+};
+
 /**
- * Analyze a candidate's fit for a job
- * @param {string} jobDescription - Full job description
- * @param {Object} candidateData - Parsed resume data
- * @param {string} language - Language code (e.g., 'en', 'es', 'fr')
- * @returns {Promise<Object>} - Analysis with score and rationale
+ * Analyze a candidate's fit for a job with multi-language support
+ * @param {Object} application - Job application with resume data
+ * @param {Object} job - Job posting details
+ * @param {string} language - Preferred language for analysis
+ * @returns {Promise<Object>} - Detailed analysis with scores and explanations
  */
-export const analyzeCandidate = async (
-  jobDescription,
-  candidateData,
-  language = "en"
-) => {
+export const analyzeCandidate = async (application, job, language = "en") => {
   try {
-    // Extract job requirements for more focused matching
-    const jobRequirements = jobDescription.includes("Requirements")
-      ? jobDescription.split("Requirements")[1]
-      : jobDescription;
+    const template = analysisTemplates[language] || analysisTemplates.en;
+    const candidateData = application.resume.parsedData;
 
-    // Create a more structured prompt for better analysis
+    // Create a structured analysis prompt
     const prompt = `
-      You are an expert AI recruiter tasked with evaluating candidate-job fit. Analyze the following data carefully:
+      ${template.instruction}:
 
-      ## JOB DESCRIPTION ##
-      ${jobDescription}
-
-      ## CANDIDATE INFORMATION ##
+      JOB REQUIREMENTS:
+      Title: ${job.title}
+      Required Skills: ${job.requiredSkills.join(", ")}
+      Experience Needed: ${
+        job.requirements?.experience || "Not specified"
+      } years
+      Education: ${job.requirements?.education?.level || "Not specified"}
+      
+      CANDIDATE PROFILE:
       Skills: ${candidateData.skills.join(", ")}
-      
-      Experience:
-      ${candidateData.experience
-        .map(
-          (exp) =>
-            `- ${exp.title} at ${exp.company}, ${exp.startDate} - ${exp.endDate}: ${exp.description}`
-        )
-        .join("\n")}
-      
-      Education:
-      ${candidateData.education
-        .map(
-          (edu) =>
-            `- ${edu.degree} in ${edu.field} from ${edu.institution}, ${edu.graduationYear}`
-        )
-        .join("\n")}
+      Experience: ${formatExperience(candidateData.experience)}
+      Education: ${formatEducation(candidateData.education)}
+      Projects: ${formatProjects(candidateData.projects)}
 
-      ## EVALUATION INSTRUCTIONS ##
-      1. Perform a structured analysis of this candidate for the job position
-      2. Consider these key factors:
-         - Skills match (weight: 40%)
-         - Experience relevance (weight: 35%)
-         - Education fit (weight: 15%)
-         - Overall profile completeness (weight: 10%)
-      3. For each factor, provide:
-         - A score from 0-100
-         - Brief justification (1-2 sentences)
-      4. Provide an overall weighted match score (0-100)
-      5. List 3 key strengths and 2 potential gaps
-      
-      ## OUTPUT FORMAT ##
-      Return your analysis in the following JSON format:
-      {
-        "factorScores": {
-          "skills": {"score": number, "justification": "string"},
-          "experience": {"score": number, "justification": "string"},
-          "education": {"score": number, "justification": "string"},
-          "profileCompleteness": {"score": number, "justification": "string"}
-        },
-        "overallScore": number,
-        "strengths": ["string", "string", "string"],
-        "gaps": ["string", "string"],
-        "summary": "string"
-      }
+      Provide a detailed analysis with the following structure:
+      1. ${template.strengthsLabel}
+      2. ${template.weaknessesLabel}
+      3. ${template.fitLabel}
+      4. ${template.recommendationLabel}
 
-      Respond in ${getLanguageName(language)} language.
+      Focus on specific examples and provide clear rationale for your assessment.
+      If possible, suggest potential interview questions based on any gaps or areas that need clarification.
     `;
 
+    // Get LLM response
     const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    const response = await result.response.text();
 
-    try {
-      // Try to parse the JSON response
-      const jsonStartIndex = text.indexOf("{");
-      const jsonEndIndex = text.lastIndexOf("}") + 1;
-      const jsonText = text.substring(jsonStartIndex, jsonEndIndex);
-      const parsedResponse = JSON.parse(jsonText);
+    // Parse the structured response
+    const analysis = parseStructuredResponse(response, template);
 
-      // Calculate the overall score if not provided or as a fallback
-      const overallScore =
-        parsedResponse.overallScore ||
-        calculateWeightedScore(parsedResponse.factorScores);
-
-      // Construct the analysis result
-      const analysis = {
-        matchScore: Math.round(overallScore),
-        factorScores: parsedResponse.factorScores || {},
-        strengths: parsedResponse.strengths || [],
-        gaps: parsedResponse.gaps || [],
-        summary: parsedResponse.summary || "",
-        rationale: text,
-      };
-
-      return analysis;
-    } catch (parseError) {
-      // Fallback if JSON parsing fails
-      console.error("Error parsing LLM response:", parseError);
-      return {
-        matchScore: extractScore(text),
-        rationale: text,
-      };
-    }
+    return {
+      ...analysis,
+      language,
+      confidence: calculateConfidenceScore(analysis),
+      suggestedQuestions: extractSuggestedQuestions(response),
+    };
   } catch (error) {
     console.error("LLM Analysis Error:", error);
     throw new Error("Failed to analyze candidate fit");
   }
 };
 
-// Helper function to calculate weighted score from factor scores
-const calculateWeightedScore = (factorScores) => {
-  if (!factorScores) return 0;
-
-  const weights = {
-    skills: 0.4,
-    experience: 0.35,
-    education: 0.15,
-    profileCompleteness: 0.1,
-  };
-
-  let totalScore = 0;
-  let weightSum = 0;
-
-  for (const [factor, weight] of Object.entries(weights)) {
-    if (factorScores[factor] && factorScores[factor].score !== undefined) {
-      totalScore += factorScores[factor].score * weight;
-      weightSum += weight;
-    }
-  }
-
-  return weightSum > 0 ? totalScore / weightSum : 0;
+/**
+ * Format experience data for LLM prompt
+ */
+const formatExperience = (experience = []) => {
+  return experience
+    .map(
+      (exp) =>
+        `${exp.title} at ${exp.company} (${exp.startDate} - ${
+          exp.endDate || "Present"
+        }): ${exp.description}`
+    )
+    .join("\n");
 };
 
-// Helper function to extract score from LLM response
-const extractScore = (text) => {
-  // This is a simple implementation - you might want to make it more robust
-  const scoreMatch = text.match(/\b([0-9]{1,3})\b/);
-  return scoreMatch ? Math.min(100, Math.max(0, parseInt(scoreMatch[1]))) : 0;
+/**
+ * Format education data for LLM prompt
+ */
+const formatEducation = (education = []) => {
+  return education
+    .map((edu) => `${edu.degree} from ${edu.institution} (${edu.field})`)
+    .join("\n");
+};
+
+/**
+ * Format projects data for LLM prompt
+ */
+const formatProjects = (projects = []) => {
+  return projects.map((proj) => `${proj.name}: ${proj.description}`).join("\n");
+};
+
+/**
+ * Parse the structured response from LLM
+ */
+const parseStructuredResponse = (response, template) => {
+  const sections = response.split(/\d\./g).filter(Boolean);
+
+  return {
+    strengths: sections[0]?.trim() || "",
+    weaknesses: sections[1]?.trim() || "",
+    overallFit: sections[2]?.trim() || "",
+    recommendation: sections[3]?.trim() || "",
+  };
+};
+
+/**
+ * Calculate a confidence score based on the analysis
+ */
+const calculateConfidenceScore = (analysis) => {
+  // Implementation of confidence scoring based on analysis completeness and specificity
+  let score = 100;
+
+  if (!analysis.strengths) score -= 25;
+  if (!analysis.weaknesses) score -= 25;
+  if (!analysis.overallFit) score -= 25;
+  if (!analysis.recommendation) score -= 25;
+
+  return score;
+};
+
+/**
+ * Extract suggested interview questions from the LLM response
+ */
+const extractSuggestedQuestions = (response) => {
+  const questionMatch = response.match(/Questions?:([\s\S]+?)(?=\n\n|$)/i);
+  if (!questionMatch) return [];
+
+  return questionMatch[1]
+    .split(/\n/)
+    .map((q) => q.trim())
+    .filter((q) => q && q.includes("?"));
 };
 
 /**
