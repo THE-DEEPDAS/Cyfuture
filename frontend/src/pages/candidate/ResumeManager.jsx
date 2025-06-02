@@ -1,374 +1,354 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { useDropzone } from 'react-dropzone';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import React, { useState, useCallback, useEffect } from "react";
+import { useDropzone } from "react-dropzone";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faFile,
+  faFileUpload,
+  faSpinner,
+  faCheckCircle,
+  faTimesCircle,
+  faFileAlt,
+  faFilePdf,
+  faFileWord,
+  faTrash,
+  faStar,
+} from "@fortawesome/free-solid-svg-icons";
+import { Link, useNavigate } from "react-router-dom";
+import api from "../../utils/api";
+import { uploadToCloudinary } from "../../utils/cloudinary";
 
 const ResumeManager = () => {
   const [resumes, setResumes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [error, setError] = useState("");
+  const [parsedData, setParsedData] = useState(null);
   const navigate = useNavigate();
-  
-  // Fetch resumes on component mount
+
+  // Handle file drop
+  const onDrop = useCallback(async (acceptedFiles) => {
+    const file = acceptedFiles[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+    if (!validTypes.includes(file.type)) {
+      setError("Please upload a PDF or DOCX file");
+      return;
+    }
+
+    try {
+      setUploading(true);
+      setError("");
+      setUploadProgress(0);
+
+      // First upload to Cloudinary
+      const cloudinaryResponse = await uploadToCloudinary(file, (progress) => {
+        setUploadProgress(progress);
+      });
+
+      // Then send to our backend
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("title", file.name.split(".")[0]);
+      formData.append("cloudinaryUrl", cloudinaryResponse.secure_url);
+
+      const response = await api.post("/api/resumes", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      // Update resumes list and show parsed data
+      setResumes((prev) => [...prev, response.data]);
+      setParsedData(response.data.parsedData);
+
+      // Show success message
+      setError("Resume uploaded successfully!");
+      setTimeout(() => setError(""), 3000);
+    } catch (err) {
+      console.error("Upload error:", err);
+      setError(err.response?.data?.message || "Error uploading resume");
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  }, []);
+
+  // Configure dropzone
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      "application/pdf": [".pdf"],
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        [".docx"],
+    },
+    maxFiles: 1,
+    multiple: false,
+  });
+
+  // Fetch resumes
   useEffect(() => {
     const fetchResumes = async () => {
       try {
         setLoading(true);
-        const response = await axios.get('/api/resumes');
+        const response = await api.get("/api/resumes");
         setResumes(response.data);
       } catch (error) {
-        console.error('Error fetching resumes:', error);
-        // Set sample data for development/demo purposes
-        setResumes([
-          {
-            id: '1',
-            title: 'Software Developer Resume',
-            fileUrl: '#',
-            fileType: 'pdf',
-            lastUpdated: '2025-02-15T10:30:00Z',
-            isDefault: true
-          },
-          {
-            id: '2',
-            title: 'Frontend Specialist Resume',
-            fileUrl: '#',
-            fileType: 'docx',
-            lastUpdated: '2025-01-20T14:45:00Z',
-            isDefault: false
-          }
-        ]);
+        console.error("Error fetching resumes:", error);
+        setError("Failed to load resumes");
       } finally {
         setLoading(false);
       }
     };
-    
+
     fetchResumes();
   }, []);
-  
-  // Format date to readable string
-  const formatDate = (dateString) => {
-    const options = { year: 'numeric', month: 'short', day: 'numeric' };
-    return new Date(dateString).toLocaleDateString(undefined, options);
-  };
-  
-  // Handle resume upload
-  const onDrop = useCallback(async (acceptedFiles) => {
-    const file = acceptedFiles[0];
-    if (!file) return;
-    
-    // Start upload process
-    setUploading(true);
-    setUploadProgress(0);
-    
+
+  // Set default resume
+  const handleSetDefault = async (resumeId) => {
     try {
-      // Create form data
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('title', file.name.replace(/\.[^/.]+$/, ''));
-      
-      // Set up progress tracking
-      const config = {
-        onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(percentCompleted);
-        },
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      };
-      
-      // Simulate delay for development/demo purposes
-      const simulateUpload = async () => {
-        // Simulate upload with intervals
-        let progress = 0;
-        const interval = setInterval(() => {
-          progress += 10;
-          setUploadProgress(progress);
-          if (progress >= 100) {
-            clearInterval(interval);
-            // Add the new resume to the list
-            const newResume = {
-              id: Date.now().toString(),
-              title: file.name.replace(/\.[^/.]+$/, ''),
-              fileUrl: '#',
-              fileType: file.name.split('.').pop().toLowerCase(),
-              lastUpdated: new Date().toISOString(),
-              isDefault: false
-            };
-            
-            setResumes(prev => [...prev, newResume]);
-            setUploading(false);
-            
-            // Navigate to the resume profile page
-            setTimeout(() => {
-              navigate('/candidate/resume-profile');
-            }, 500);
-          }
-        }, 300);
-      };
-      
-      // For development/demo, use simulation instead of actual API call
-      simulateUpload();
-      
-      // Uncomment below for actual API call
-      /*
-      const response = await axios.post('/api/resumes', formData, config);
-      setResumes(prev => [...prev, response.data]);
-      setUploading(false);
-      
-      // Navigate to the profile page to show parsed resume data
-      navigate(`/candidate/resume-profile/${response.data.id}`);
-      */
-    } catch (error) {
-      console.error('Error uploading resume:', error);
-      setUploading(false);
-      alert('Failed to upload resume. Please try again.');
-    }
-  }, [navigate]);
-  
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'application/pdf': ['.pdf'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
-    },
-    maxFiles: 1,
-    maxSize: 5242880, // 5MB
-  });
-  
-  const handleSetDefault = async (id) => {
-    try {
-      // For development/demo purposes
-      setResumes(
-        resumes.map(resume => ({
+      await api.patch(`/api/resumes/${resumeId}/default`);
+      setResumes((prev) =>
+        prev.map((resume) => ({
           ...resume,
-          isDefault: resume.id === id
+          isDefault: resume._id === resumeId,
         }))
       );
-      
-      // Uncomment for actual API call
-      // await axios.put(`/api/resumes/${id}/default`);
     } catch (error) {
-      console.error('Error setting default resume:', error);
-      alert('Failed to set resume as default. Please try again.');
+      console.error("Error setting default resume:", error);
+      setError("Failed to set default resume");
     }
   };
-  
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this resume?')) {
-      try {
-        // For development/demo purposes
-        setResumes(resumes.filter(resume => resume.id !== id));
-        
-        // Uncomment for actual API call
-        // await axios.delete(`/api/resumes/${id}`);
-      } catch (error) {
-        console.error('Error deleting resume:', error);
-        alert('Failed to delete resume. Please try again.');
-      }
+
+  // Delete resume
+  const handleDelete = async (resumeId) => {
+    if (!window.confirm("Are you sure you want to delete this resume?")) return;
+
+    try {
+      await api.delete(`/api/resumes/${resumeId}`);
+      setResumes((prev) => prev.filter((resume) => resume._id !== resumeId));
+    } catch (error) {
+      console.error("Error deleting resume:", error);
+      setError("Failed to delete resume");
     }
   };
-  
-  const handleViewProfile = (id) => {
-    navigate(`/candidate/resume-profile/${id}`);
+
+  // Format date
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
   };
-  
+
+  // Get icon for file type
+  const getFileIcon = (fileType) => {
+    switch (fileType.toLowerCase()) {
+      case "pdf":
+        return faFilePdf;
+      case "docx":
+        return faFileWord;
+      default:
+        return faFileAlt;
+    }
+  };
+
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-primary-900 to-background-secondary rounded-lg p-6 shadow-custom-dark">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-white mb-2">
-              Resume Manager
-            </h1>
-            <p className="text-gray-300">
-              Upload and manage your resumes for job applications
-            </p>
-          </div>
-          
-          <Link to="/candidate/resume-profile" className="btn-primary">
-            <FontAwesomeIcon icon="chart-line" className="mr-2" />
-            View Resume Profile
-          </Link>
-        </div>
-      </div>
-      
-      {/* Upload area */}
-      <div className="card">
-        <h2 className="text-xl font-semibold text-white mb-4">Upload New Resume</h2>
-        
-        <div 
-          {...getRootProps()} 
-          className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-            isDragActive ? 'border-primary-500 bg-primary-900/20' : 'border-dark-600 hover:border-primary-400'
-          }`}
+    <div className="max-w 4xl mx-auto p-6 space-y-8">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-gray-900">Resume Manager</h1>
+        <Link
+          to="/candidate/profile"
+          className="text-blue-600 hover:text-blue-700"
         >
-          <input {...getInputProps()} />
-          
-          <FontAwesomeIcon icon="file-upload" className="text-4xl text-gray-400 mb-3" />
-          
-          <p className="text-white mb-2">
-            {isDragActive
-              ? 'Drop your resume here'
-              : 'Drag & drop your resume here, or click to select'
-            }
-          </p>
-          <p className="text-sm text-gray-400">
-            Supports PDF, DOCX (Max 5MB)
-          </p>
-        </div>
-        
+          View Profile
+        </Link>
+      </div>
+
+      {/* Upload Area */}
+      <div
+        {...getRootProps()}
+        className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
+          ${
+            isDragActive
+              ? "border-blue-500 bg-blue-50"
+              : "border-gray-300 hover:border-blue-400"
+          }`}
+      >
+        <input {...getInputProps()} />
+        <FontAwesomeIcon
+          icon={uploading ? faSpinner : faFileUpload}
+          className={`text-4xl mb-4 ${
+            uploading ? "animate-spin" : ""
+          } text-gray-400`}
+        />
+        <p className="text-gray-600">
+          {isDragActive
+            ? "Drop your resume here..."
+            : "Drag and drop your resume here, or click to select"}
+        </p>
+        <p className="text-sm text-gray-500 mt-2">
+          Supports PDF and DOCX files
+        </p>
         {uploading && (
           <div className="mt-4">
-            <div className="flex justify-between text-sm text-gray-300 mb-1">
-              <span>Uploading...</span>
-              <span>{uploadProgress}%</span>
-            </div>
-            <div className="w-full bg-dark-700 rounded-full h-2">
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
               <div
-                className="bg-primary-500 h-2 rounded-full transition-all duration-300"
+                className="bg-blue-600 h-2.5 rounded-full transition-all"
                 style={{ width: `${uploadProgress}%` }}
               ></div>
             </div>
+            <p className="text-sm text-gray-600 mt-2">
+              Uploading... {uploadProgress}%
+            </p>
           </div>
         )}
       </div>
-      
-      {/* Resume list */}
-      <div className="card">
-        <h2 className="text-xl font-semibold text-white mb-6">My Resumes</h2>
-        
-        <div className="space-y-4">
+
+      {/* Error/Success Messages */}
+      {error && (
+        <div
+          className={`p-4 rounded-lg ${
+            error.includes("success")
+              ? "bg-green-100 text-green-700"
+              : "bg-red-100 text-red-700"
+          }`}
+        >
+          {error}
+        </div>
+      )}
+
+      {/* Resumes List */}
+      {loading ? (
+        <div className="text-center py-8">
+          <FontAwesomeIcon
+            icon={faSpinner}
+            spin
+            className="text-3xl text-gray-400"
+          />
+          <p className="text-gray-600 mt-2">Loading resumes...</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {resumes.map((resume) => (
-            <div key={resume.id} className="bg-background-secondary rounded-lg p-5 flex items-center justify-between">
-              <div className="flex items-center">
-                <div className="rounded-full bg-primary-700/30 p-3 mr-4">
-                  <FontAwesomeIcon 
-                    icon={resume.fileType === 'pdf' ? 'file-pdf' : 'file-word'} 
-                    className="text-primary-500" 
-                  />
+            <div
+              key={resume._id}
+              className="bg-white rounded-lg shadow-sm p-6 border border-gray-200 relative"
+            >
+              {resume.isDefault && (
+                <div className="absolute top-4 right-4">
+                  <FontAwesomeIcon icon={faStar} className="text-yellow-500" />
                 </div>
-                
-                <div>
-                  <div className="flex items-center">
-                    <h3 className="font-medium text-white">{resume.title}</h3>
-                    {resume.isDefault && (
-                      <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-primary-700/50 text-primary-300">
-                        Default
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-400">
-                    Last updated {formatDate(resume.lastUpdated)}
+              )}
+              <div className="flex items-start space-x-4">
+                <FontAwesomeIcon
+                  icon={getFileIcon(resume.fileType)}
+                  className="text-2xl text-gray-400"
+                />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-semibold text-gray-900 truncate">
+                    {resume.title}
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Updated {formatDate(resume.updatedAt)}
                   </p>
+                  <div className="mt-4 flex space-x-4">
+                    <button
+                      onClick={() => handleSetDefault(resume._id)}
+                      disabled={resume.isDefault}
+                      className={`text-sm ${
+                        resume.isDefault
+                          ? "text-gray-400 cursor-not-allowed"
+                          : "text-blue-600 hover:text-blue-700"
+                      }`}
+                    >
+                      Set as Default
+                    </button>
+                    <button
+                      onClick={() => handleDelete(resume._id)}
+                      className="text-sm text-red-600 hover:text-red-700"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
-              </div>
-              
-              <div className="flex space-x-3">
-                {!resume.isDefault && (
-                  <button 
-                    onClick={() => handleSetDefault(resume.id)} 
-                    className="text-gray-400 hover:text-primary-400 transition-colors"
-                    title="Set as Default"
-                  >
-                    <FontAwesomeIcon icon="star" />
-                  </button>
-                )}
-                
-                <button 
-                  onClick={() => handleViewProfile(resume.id)}
-                  className="text-gray-400 hover:text-primary-400 transition-colors"
-                  title="View Resume Profile"
-                >
-                  <FontAwesomeIcon icon="user" />
-                </button>
-                
-                <button 
-                  className="text-gray-400 hover:text-primary-400 transition-colors"
-                  title="Preview"
-                >
-                  <FontAwesomeIcon icon="eye" />
-                </button>
-                
-                <button 
-                  onClick={() => handleDelete(resume.id)} 
-                  className="text-gray-400 hover:text-error-500 transition-colors"
-                  title="Delete"
-                >
-                  <FontAwesomeIcon icon="trash-alt" />
-                </button>
               </div>
             </div>
           ))}
-          
-          {resumes.length === 0 && (
-            <div className="text-center py-6">
-              <FontAwesomeIcon icon="file-alt" className="text-3xl text-gray-500 mb-2" />
-              <p className="text-gray-400">You haven't uploaded any resumes yet.</p>
-            </div>
-          )}
         </div>
-      </div>
-      
-      {/* Tips section */}
-      <div className="bg-background-secondary rounded-lg p-6">
-        <h2 className="text-xl font-semibold text-white mb-4">Resume Tips</h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-background-primary/50 p-4 rounded-lg">
-            <div className="flex items-center mb-2">
-              <FontAwesomeIcon icon="check-circle" className="text-success-500 mr-2" />
-              <h3 className="font-medium text-white">Do's</h3>
+      )}
+
+      {/* Parsed Data Preview */}
+      {parsedData && (
+        <div className="mt-8 bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">
+            Parsed Resume Data
+          </h2>
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-gray-900">Skills</h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {parsedData.skills.map((skill, index) => (
+                  <span
+                    key={index}
+                    className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
             </div>
-            <ul className="text-gray-300 text-sm space-y-2">
-              <li className="flex items-start">
-                <FontAwesomeIcon icon="check" className="text-success-500 mt-1 mr-2" />
-                <span>Tailor your resume to each job application</span>
-              </li>
-              <li className="flex items-start">
-                <FontAwesomeIcon icon="check" className="text-success-500 mt-1 mr-2" />
-                <span>Quantify achievements with metrics</span>
-              </li>
-              <li className="flex items-start">
-                <FontAwesomeIcon icon="check" className="text-success-500 mt-1 mr-2" />
-                <span>Use keywords from the job description</span>
-              </li>
-              <li className="flex items-start">
-                <FontAwesomeIcon icon="check" className="text-success-500 mt-1 mr-2" />
-                <span>Keep formatting clean and consistent</span>
-              </li>
-            </ul>
-          </div>
-          
-          <div className="bg-background-primary/50 p-4 rounded-lg">
-            <div className="flex items-center mb-2">
-              <FontAwesomeIcon icon="times-circle" className="text-error-500 mr-2" />
-              <h3 className="font-medium text-white">Don'ts</h3>
+            <div>
+              <h3 className="text-lg font-medium text-gray-900">Experience</h3>
+              <div className="mt-2 space-y-4">
+                {parsedData.experience.map((exp, index) => (
+                  <div key={index} className="border-l-2 border-gray-200 pl-4">
+                    <h4 className="font-medium text-gray-900">{exp.title}</h4>
+                    <p className="text-sm text-gray-600">{exp.company}</p>
+                    <p className="text-sm text-gray-500">{exp.duration}</p>
+                    <ul className="mt-2 list-disc list-inside text-sm text-gray-600">
+                      {exp.responsibilities.map((resp, idx) => (
+                        <li key={idx}>{resp}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
             </div>
-            <ul className="text-gray-300 text-sm space-y-2">
-              <li className="flex items-start">
-                <FontAwesomeIcon icon="times" className="text-error-500 mt-1 mr-2" />
-                <span>Include irrelevant experience</span>
-              </li>
-              <li className="flex items-start">
-                <FontAwesomeIcon icon="times" className="text-error-500 mt-1 mr-2" />
-                <span>Use generic phrases like "team player"</span>
-              </li>
-              <li className="flex items-start">
-                <FontAwesomeIcon icon="times" className="text-error-500 mt-1 mr-2" />
-                <span>Make spelling or grammar mistakes</span>
-              </li>
-              <li className="flex items-start">
-                <FontAwesomeIcon icon="times" className="text-error-500 mt-1 mr-2" />
-                <span>Exceed 2 pages for most positions</span>
-              </li>
-            </ul>
+            <div>
+              <h3 className="text-lg font-medium text-gray-900">Projects</h3>
+              <div className="mt-2 space-y-4">
+                {parsedData.projects.map((project, index) => (
+                  <div key={index} className="border-l-2 border-gray-200 pl-4">
+                    <h4 className="font-medium text-gray-900">
+                      {project.name}
+                    </h4>
+                    <p className="text-sm text-gray-600">
+                      {project.description}
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {project.technologies.map((tech, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
+                        >
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import api from "../utils/api.js";
 
 const AuthContext = createContext();
 
@@ -23,7 +24,7 @@ export const AuthProvider = ({ children }) => {
           axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
           // Get user data
-          const { data } = await axios.get(`/api/users/me`);
+          const { data } = await api.get(`/users/me`);
           setUser(data);
         } catch (error) {
           console.error("Auth initialization failed:", error);
@@ -41,7 +42,7 @@ export const AuthProvider = ({ children }) => {
   // Login function
   const login = async (credentials) => {
     try {
-      const { data } = await axios.post(`/api/auth/login`, credentials);
+      const { data } = await api.post(`/auth/login`, credentials);
 
       localStorage.setItem("token", data.token);
       axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
@@ -69,7 +70,7 @@ export const AuthProvider = ({ children }) => {
   // Register function
   const register = async (userData) => {
     try {
-      const { data } = await axios.post(`/api/auth/register`, userData);
+      const { data } = await api.post(`/auth/register`, userData);
 
       localStorage.setItem("token", data.token);
       axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;

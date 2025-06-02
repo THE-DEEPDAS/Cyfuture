@@ -1,40 +1,54 @@
-import express from 'express';
-import { protect, company } from '../middleware/authMiddleware.js';
-
-// Controller functions will be implemented later
-// import { createJob, getJobs, getJob, updateJob, deleteJob, getCompanyJobs } from '../controllers/jobController.js';
+import express from "express";
+import {
+  protect,
+  companyOnly,
+  candidate,
+} from "../middleware/authMiddleware.js";
+import {
+  createJob,
+  getJobs,
+  getJob,
+  updateJob,
+  deleteJob,
+  getCompanyJobs,
+  applyForJob,
+} from "../controllers/jobController.js";
 
 const router = express.Router();
 
-// Routes will be implemented with actual controller functions
+// @desc    Create new job
 // @route   POST /api/jobs
-router.post('/', protect, company, (req, res) => {
-  res.status(501).json({ message: 'Not implemented yet' });
-});
+// @access  Private
+router.post("/", protect, companyOnly, createJob);
 
+// @desc    Get all jobs
 // @route   GET /api/jobs
-router.get('/', (req, res) => {
-  res.status(501).json({ message: 'Not implemented yet' });
-});
+// @access  Public
+router.get("/", getJobs);
 
-// @route   GET /api/jobs/:id
-router.get('/:id', (req, res) => {
-  res.status(501).json({ message: 'Not implemented yet' });
-});
-
-// @route   PUT /api/jobs/:id
-router.put('/:id', protect, company, (req, res) => {
-  res.status(501).json({ message: 'Not implemented yet' });
-});
-
-// @route   DELETE /api/jobs/:id
-router.delete('/:id', protect, company, (req, res) => {
-  res.status(501).json({ message: 'Not implemented yet' });
-});
-
+// @desc    Get jobs by company
 // @route   GET /api/jobs/company/me
-router.get('/company/me', protect, company, (req, res) => {
-  res.status(501).json({ message: 'Not implemented yet' });
-});
+// @access  Private
+router.get("/company/me", protect, companyOnly, getCompanyJobs);
+
+// @desc    Get job by ID
+// @route   GET /api/jobs/:id
+// @access  Public
+router.get("/:id", getJob);
+
+// @desc    Update job
+// @route   PUT /api/jobs/:id
+// @access  Private
+router.put("/:id", protect, companyOnly, updateJob);
+
+// @desc    Delete job
+// @route   DELETE /api/jobs/:id
+// @access  Private
+router.delete("/:id", protect, companyOnly, deleteJob);
+
+// @desc    Apply for a job
+// @route   POST /api/jobs/:id/apply
+// @access  Private
+router.post("/:id/apply", protect, candidate, applyForJob);
 
 export default router;
