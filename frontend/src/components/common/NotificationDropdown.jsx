@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useNavigate } from "react-router-dom";
 import api from "../../utils/api";
-import { socket } from "../../utils/socket";
 
 const NotificationDropdown = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -11,19 +10,17 @@ const NotificationDropdown = () => {
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
-
-  // Fetch notifications on component mount
+  // Fetch notifications on component mount and start polling
   useEffect(() => {
     fetchNotifications();
 
-    // Setup socket listener for new notifications
-    socket.on("notification", (notification) => {
-      setNotifications((prev) => [notification, ...prev]);
-      setUnreadCount((count) => count + 1);
-    });
+    // Poll for new notifications every 10 seconds
+    const pollInterval = setInterval(() => {
+      fetchNotifications();
+    }, 10000);
 
     return () => {
-      socket.off("notification");
+      clearInterval(pollInterval);
     };
   }, []);
 

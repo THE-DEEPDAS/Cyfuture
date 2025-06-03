@@ -420,9 +420,6 @@ export const updateApplicationStatus = asyncHandler(async (req, res) => {
 
   const updatedApplication = await application.save();
 
-  // Send notification to the candidate
-  const io = req.app.get("io"); // Get Socket.io instance from Express app
-
   // Create status-specific notification messages
   let notificationTitle = "Application Status Updated";
   let notificationMessage = `Your application for ${application.job.title} has been updated to: ${status}`;

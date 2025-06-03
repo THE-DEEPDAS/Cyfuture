@@ -273,16 +273,16 @@ export const searchMessages = asyncHandler(async (req, res) => {
 export const getOnlineStatus = asyncHandler(async (req, res) => {
   const { userId } = req.params;
 
-  // Get Socket.io instance
-  const io = req.app.get("io");
-
-  // Check if user has any active socket connections
-  const userSockets = await io.in(userId).allSockets();
-  const isOnline = userSockets.size > 0;
+  // In polling-based system, we'll consider a user online if they've polled recently
+  const ONLINE_THRESHOLD = 30000; // 30 seconds
+  const user = await User.findById(userId);
+  const isOnline =
+    user.lastPolled &&
+    Date.now() - new Date(user.lastPolled).getTime() < ONLINE_THRESHOLD;
 
   res.json({
     userId,
     status: isOnline ? "online" : "offline",
-    lastSeen: new Date(), // You might want to store and return actual last seen time from a database
+    lastSeen: user.lastPolled || user.lastSeen || user.updatedAt,
   });
 });

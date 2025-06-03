@@ -1,5 +1,5 @@
 import api from "../utils/api";
-import { clientMessageQueue } from "../utils/messageQueue";
+import { clientMessageQueue } from "../../../frontend/src/utils/messageQueue.js";
 import { retryManager } from "../utils/retryManager";
 import {
   MESSAGE_SEND_REQUEST,
@@ -18,20 +18,43 @@ import {
   MESSAGE_MARK_READ_SUCCESS,
   MESSAGE_MARK_READ_FAIL,
 } from "../constants/messageConstants";
-import {
-  socket,
-  joinConversation,
-  leaveConversation,
-  emitTyping,
-  stopTyping,
-  sendMessage as emitMessage,
-  markMessagesAsRead as emitMarkRead,
-} from "../utils/socket";
 
 // Initialize message queue handler
-clientMessageQueue.setFlushHandler(async (messages) => {
-  return await sendMessagesBatch(messages);
+clientMessageQueue.setFlushHandler(async (conversationId, messages) => {
+  try {
+    return await sendMessagesBatch(conversationId, messages);
+  } catch (error) {
+    console.error("Error in flush handler:", error);
+    throw error;
+  }
 });
+
+let pollInterval;
+
+// Start polling for new messages
+export const startMessagePolling = (userId) => async (dispatch) => {
+  if (pollInterval) {
+    clearInterval(pollInterval);
+  }
+
+  const pollMessages = async () => {
+    const lastPoll = localStorage.getItem("lastMessagePoll") || 0;
+    const { data } = await api.get(`/messages/updates?since=${lastPoll}`);
+
+    if (data.messages && data.messages.length > 0) {
+      dispatch({
+        type: MESSAGES_FETCH_SUCCESS,
+        payload: data.messages,
+      });
+    }
+
+    localStorage.setItem("lastMessagePoll", Date.now());
+  };
+
+  // Poll immediately and then every 5 seconds
+  await pollMessages();
+  pollInterval = setInterval(pollMessages, 5000);
+};
 
 // Fetch all conversations
 export const fetchConversations = () => async (dispatch) => {
@@ -42,11 +65,6 @@ export const fetchConversations = () => async (dispatch) => {
     const data = await retryManager.execute(operationId, async () => {
       const { data } = await api.get("/messages/conversations");
       return data;
-    });
-
-    // Join socket rooms for each conversation
-    data.forEach((conversation) => {
-      joinConversation(conversation._id);
     });
 
     dispatch({
@@ -363,3 +381,20 @@ export const retryFailedMessages =
       throw error;
     }
   };
+
+// Helper function to send batched messages
+const sendMessagesBatch = async (conversationId, messages) => {
+  const operationId = `send_messages_batch_${conversationId}_${Date.now()}`;
+  try {
+    return await retryManager.execute(operationId, async () => {
+      const { data } = await api.post(
+        `/messages/conversations/${conversationId}/batch`,
+        { messages }
+      );
+      return data;
+    });
+  } catch (error) {
+    console.error("Error sending message batch:", error);
+    throw error;
+  }
+};

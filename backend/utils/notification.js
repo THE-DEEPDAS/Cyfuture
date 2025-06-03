@@ -1,19 +1,24 @@
-// Notification utility for sending real-time and email notifications
+// Notification utility for database notifications
 import User from "../models/User.js";
 
 /**
- * Send a real-time notification via Socket.io
- * @param {Object} io - Socket.io instance
+ * Store a notification for later polling
  * @param {String} userId - ID of the recipient user
- * @param {Object} notification - Notification data to send
+ * @param {Object} notification - Notification data to store
  */
-export const sendRealTimeNotification = (io, userId, notification) => {
-  if (io && userId) {
-    // Emit to user's room (users join their own userId room on connection)
-    io.to(userId).emit("notification", {
-      ...notification,
-      timestamp: new Date(),
+export const storeNotification = async (userId, notification) => {
+  try {
+    await User.findByIdAndUpdate(userId, {
+      $push: {
+        notifications: {
+          ...notification,
+          timestamp: new Date(),
+          isRead: false,
+        },
+      },
     });
+  } catch (error) {
+    console.error("Error storing notification:", error);
   }
 };
 
@@ -69,22 +74,14 @@ export const createNotification = async (
 };
 
 /**
- * Send a notification to a user through all available channels
- * @param {Object} io - Socket.io instance
+ * Send a notification to a user through database storage for polling
  * @param {String} userId - ID of the recipient user
  * @param {String} type - Notification type
  * @param {String} title - Notification title
  * @param {String} message - Notification message
  * @param {Object} data - Additional notification data
  */
-export const notifyUser = async (
-  io,
-  userId,
-  type,
-  title,
-  message,
-  data = {}
-) => {
+export const notifyUser = async (userId, type, title, message, data = {}) => {
   // Create database notification
   const notification = await createNotification(
     userId,
@@ -94,14 +91,8 @@ export const notifyUser = async (
     data
   );
 
-  // Send real-time notification if we have io instance
+  // Store notification for polling
   if (notification) {
-    sendRealTimeNotification(io, userId, notification);
+    await storeNotification(userId, notification);
   }
-};
-
-export default {
-  sendRealTimeNotification,
-  createNotification,
-  notifyUser,
 };
