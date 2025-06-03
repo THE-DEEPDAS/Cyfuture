@@ -1,4 +1,4 @@
-export default class RetryManager {
+class RetryManager {
   constructor(maxRetries = 3, baseDelay = 1000) {
     this.maxRetries = maxRetries;
     this.baseDelay = baseDelay;
@@ -51,7 +51,10 @@ export default class RetryManager {
       return this.execute(operationId, operation);
     }
   }
+
   clearRetries(operationId) {
     this.retryMap.delete(operationId);
   }
 }
+
+export default RetryManager;

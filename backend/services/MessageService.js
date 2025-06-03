@@ -3,7 +3,10 @@ import Conversation from "../models/Conversation.js";
 import { getIO } from "../socket.js";
 import mongoose from "mongoose";
 import { messageQueue } from "../utils/messageQueue.js";
-import { retryManager } from "../utils/retryManagerInstance.js";
+import RetryManager from "../utils/retryManager.js";
+
+// Create retryManager instance
+const retryManager = new RetryManager(3, 1000);
 
 class MessageService {
   constructor() {

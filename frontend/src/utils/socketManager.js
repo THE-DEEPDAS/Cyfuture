@@ -7,7 +7,7 @@ import {
   SOCKET_USER_ONLINE,
   SOCKET_USER_OFFLINE,
 } from "../constants/messageConstants";
-import { retryManager } from "./retryManagerInstance";
+import { retryManager } from "./retryManager";
 import { clientMessageQueue } from "./messageQueue";
 
 // Initialize socket connection with message events

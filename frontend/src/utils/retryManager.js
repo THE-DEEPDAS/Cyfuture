@@ -1,4 +1,4 @@
-export class RetryManager {
+class RetryManager {
   constructor(options = {}) {
     this.maxRetries = options.maxRetries || 3;
     this.baseDelay = options.baseDelay || 1000;
@@ -59,6 +59,7 @@ export class RetryManager {
   reset(operationId) {
     this.retryMap.delete(operationId);
   }
+
   clearAll() {
     this.retryMap.clear();
   }
@@ -67,3 +68,12 @@ export class RetryManager {
     return this.retryMap.get(operationId);
   }
 }
+
+// Create singleton instance
+const defaultOptions = {
+  maxRetries: 3,
+  baseDelay: 1000,
+  maxDelay: 10000,
+};
+
+export const retryManager = new RetryManager(defaultOptions);

@@ -8,14 +8,13 @@ import {
   SOCKET_USER_ONLINE,
   SOCKET_USER_OFFLINE,
 } from "../constants/messageConstants";
-import { retryManager } from "./retryManagerInstance";
-import { clientMessageQueue } from "./messageQueueInstance";
+import { retryManager } from "./retryManager";
+import { clientMessageQueue } from "./messageQueue";
 
 // Initialize socket connection with message events
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
-
-// Create socket instance with configuration
-const socket = io(SOCKET_URL, {
+// Socket configuration with retry strategy and timeout
+export const socket = io(SOCKET_URL, {
   autoConnect: false,
   reconnection: true,
   reconnectionAttempts: 5,
@@ -24,19 +23,13 @@ const socket = io(SOCKET_URL, {
   transports: ["websocket", "polling"],
   reconnectionDelayMax: 10000,
   randomizationFactor: 0.5,
-  forceNew: true,
 });
-
-// Export the socket instance
-export { socket };
 
 // Connection management
 let isConnecting = false;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
-const connectedRooms = new Set();
-
-// Set up message queue handler
+const connectedRooms = new Set(); // Set up message queue handler
 clientMessageQueue.setFlushHandler(async (messages) => {
   if (!socket.connected) return;
 
@@ -55,9 +48,7 @@ clientMessageQueue.setFlushHandler(async (messages) => {
       throw error; // Allow message queue to handle retry
     }
   }
-});
-
-// Function to connect and authenticate socket
+}); // Function to connect and authenticate socket
 export const connectSocket = (token) => {
   if (isConnecting) return;
   isConnecting = true;
@@ -75,7 +66,6 @@ export const connectSocket = (token) => {
     });
     clientMessageQueue.flushAll();
   });
-
   socket.on("connect_error", (error) => {
     console.error("Socket connection error:", error);
     isConnecting = false;
@@ -97,7 +87,6 @@ export const connectSocket = (token) => {
       setTimeout(() => socket.connect(), backoffDelay);
     }
   });
-
   socket.on("disconnect", (reason) => {
     console.log("Socket disconnected:", reason);
     if (reason === "io server disconnect") {
@@ -125,26 +114,17 @@ export const connectSocket = (token) => {
       payload: { conversationId, userId },
     });
   });
-
   socket.on("user_status_change", ({ userId, status }) => {
     if (status === "online") {
-      store.dispatch({
-        type: SOCKET_USER_ONLINE,
-        payload: userId,
-      });
+      store.dispatch({ type: SOCKET_USER_ONLINE, payload: userId });
     } else {
-      store.dispatch({
-        type: SOCKET_USER_OFFLINE,
-        payload: userId,
-      });
+      store.dispatch({ type: SOCKET_USER_OFFLINE, payload: userId });
     }
   });
   if (!socket.connected) {
     socket.connect();
   }
-};
-
-// Get the socket instance
+}; // Get the socket instance
 export const getSocket = () => {
   if (!socket.connected) {
     socket.connect();

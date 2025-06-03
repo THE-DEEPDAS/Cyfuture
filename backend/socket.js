@@ -18,7 +18,7 @@ export const initSocket = (server) => {
     },
     transports: ["websocket", "polling"],
   });
-
+  
   console.log("Socket.io initialized");
   return io;
 };
@@ -30,5 +30,4 @@ export const getIO = () => {
   return io;
 };
 
-// Also export io directly for backward compatibility
 export { io };
