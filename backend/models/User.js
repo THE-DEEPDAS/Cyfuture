@@ -94,6 +94,10 @@ const userSchema = new mongoose.Schema(
         },
       },
     ],
+    lastSeen: {
+      type: Date,
+      default: Date.now,
+    },
     createdAt: {
       type: Date,
       default: Date.now,

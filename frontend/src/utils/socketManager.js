@@ -1,4 +1,3 @@
-// Frontend Socket.io client implementation
 import { io } from "socket.io-client";
 import store from "../store";
 import {
@@ -9,13 +8,11 @@ import {
   SOCKET_USER_OFFLINE,
 } from "../constants/messageConstants";
 import { retryManager } from "./retryManagerInstance";
-import { clientMessageQueue } from "./messageQueueInstance";
+import { clientMessageQueue } from "./messageQueue";
 
 // Initialize socket connection with message events
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
-
-// Create socket instance with configuration
-const socket = io(SOCKET_URL, {
+export const socket = io(SOCKET_URL, {
   autoConnect: false,
   reconnection: true,
   reconnectionAttempts: 5,
@@ -24,11 +21,7 @@ const socket = io(SOCKET_URL, {
   transports: ["websocket", "polling"],
   reconnectionDelayMax: 10000,
   randomizationFactor: 0.5,
-  forceNew: true,
 });
-
-// Export the socket instance
-export { socket };
 
 // Connection management
 let isConnecting = false;
@@ -67,9 +60,7 @@ export const connectSocket = (token) => {
   socket.on("connect", () => {
     console.log("Socket connected:", socket.id);
     isConnecting = false;
-    reconnectAttempts = 0;
-
-    // Rejoin rooms and process queue after reconnection
+    reconnectAttempts = 0; // Rejoin rooms and process queue after reconnection
     connectedRooms.forEach((room) => {
       socket.emit("join_conversation", room);
     });
@@ -106,39 +97,41 @@ export const connectSocket = (token) => {
   });
 
   // Message event handlers
-  socket.on("receive_message", (message) => {
+  socket.on("message:received", (message) => {
     store.dispatch({
       type: SOCKET_MESSAGE_RECEIVED,
       payload: message,
     });
   });
 
-  socket.on("user_typing", ({ conversationId, userId }) => {
+  socket.on("user:typing", ({ conversationId, userId }) => {
     store.dispatch({
       type: SOCKET_USER_TYPING,
       payload: { conversationId, userId },
     });
   });
-  socket.on("user_stopped_typing", ({ conversationId, userId }) => {
+
+  socket.on("user:stop_typing", ({ conversationId, userId }) => {
     store.dispatch({
       type: SOCKET_USER_STOP_TYPING,
       payload: { conversationId, userId },
     });
   });
 
-  socket.on("user_status_change", ({ userId, status }) => {
-    if (status === "online") {
-      store.dispatch({
-        type: SOCKET_USER_ONLINE,
-        payload: userId,
-      });
-    } else {
-      store.dispatch({
-        type: SOCKET_USER_OFFLINE,
-        payload: userId,
-      });
-    }
+  socket.on("user:online", (userId) => {
+    store.dispatch({
+      type: SOCKET_USER_ONLINE,
+      payload: userId,
+    });
   });
+
+  socket.on("user:offline", (userId) => {
+    store.dispatch({
+      type: SOCKET_USER_OFFLINE,
+      payload: userId,
+    });
+  });
+
   if (!socket.connected) {
     socket.connect();
   }
@@ -193,31 +186,56 @@ export const sendMessage = async (message) => {
   }
 };
 
-// Export sendMessage as emitMessage for backward compatibility
-export const emitMessage = sendMessage;
+// Enhanced typing indicator with debounce
+let typingTimeout;
+export const emitTyping = (conversationId, isTyping) => {
+  if (!socket.connected) return;
 
-// Add typing indicator functions
-export const emitTyping = (conversationId) => {
-  if (!socket.connected) {
-    socket.connect();
+  if (typingTimeout) {
+    clearTimeout(typingTimeout);
   }
-  socket.emit("typing_start", { conversationId });
-};
 
-export const stopTyping = (conversationId) => {
-  socket.emit("typing_end", { conversationId });
-};
+  socket.emit("typing_status", { conversationId, isTyping });
 
-// Mark messages as read
-export const markMessagesAsRead = (messageId, conversationId) => {
-  if (!socket.connected) {
-    socket.connect();
+  if (isTyping) {
+    typingTimeout = setTimeout(() => {
+      socket.emit("typing_status", { conversationId, isTyping: false });
+    }, 3000);
   }
-  socket.emit("mark_read", { messageId, conversationId });
 };
 
-// Export markMessagesAsRead as emitMarkRead for backward compatibility
-export const emitMarkRead = markMessagesAsRead;
+// Enhanced read status with retry
+export const markMessagesAsRead = async (conversationId) => {
+  const operationId = `mark_read_${conversationId}_${Date.now()}`;
+  if (!socket.connected) {
+    clientMessageQueue.add({
+      event: "mark_messages_read",
+      data: { conversationId },
+    });
+    return;
+  }
+
+  try {
+    await retryManager.execute(operationId, () => {
+      return new Promise((resolve, reject) => {
+        socket.emit("mark_messages_read", { conversationId }, (response) => {
+          if (response?.error) {
+            reject(new Error(response.error));
+          } else {
+            resolve(response);
+          }
+        });
+        setTimeout(() => reject(new Error("Mark read timeout")), 5000);
+      });
+    });
+  } catch (error) {
+    console.error("Failed to mark messages as read:", error);
+    clientMessageQueue.add({
+      event: "mark_messages_read",
+      data: { conversationId },
+    });
+  }
+};
 
 // Clean up on unmount
 export const cleanupSocket = () => {

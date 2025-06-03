@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { getJobDetails } from "../../actions/jobActions";
@@ -13,14 +13,25 @@ import { toast } from "react-toastify";
 const ApplicationForm = () => {
   const { jobId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useDispatch();
 
-  // Form state
-  const [selectedResume, setSelectedResume] = useState("");
-  const [coverLetter, setCoverLetter] = useState("");
-  const [chatbotResponses, setChatbotResponses] = useState([]);
-  const [step, setStep] = useState(1);
-  const [previewMode, setPreviewMode] = useState(false);
+  // Form state with localStorage persistence
+  const [selectedResume, setSelectedResume] = useState(
+    () => localStorage.getItem(`application_${jobId}_resume`) || ""
+  );
+  const [coverLetter, setCoverLetter] = useState(
+    () => localStorage.getItem(`application_${jobId}_coverLetter`) || ""
+  );
+  const [chatbotResponses, setChatbotResponses] = useState(() => {
+    const saved = localStorage.getItem(`application_${jobId}_responses`);
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [step, setStep] = useState(() =>
+    parseInt(localStorage.getItem(`application_${jobId}_step`) || "1")
+  );
+  const [validationErrors, setValidationErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Redux state
   const jobDetails = useSelector((state) => state.jobDetails);
@@ -44,7 +55,28 @@ const ApplicationForm = () => {
   useEffect(() => {
     dispatch(getJobDetails(jobId));
     dispatch(getCandidateResumes());
-  }, [dispatch, jobId]);
+
+    // Clean up localStorage on unmount
+    return () => {
+      if (submitSuccess) {
+        localStorage.removeItem(`application_${jobId}_resume`);
+        localStorage.removeItem(`application_${jobId}_coverLetter`);
+        localStorage.removeItem(`application_${jobId}_responses`);
+        localStorage.removeItem(`application_${jobId}_step`);
+      }
+    };
+  }, [dispatch, jobId, submitSuccess]);
+
+  // Persist form state
+  useEffect(() => {
+    localStorage.setItem(`application_${jobId}_resume`, selectedResume);
+    localStorage.setItem(`application_${jobId}_coverLetter`, coverLetter);
+    localStorage.setItem(
+      `application_${jobId}_responses`,
+      JSON.stringify(chatbotResponses)
+    );
+    localStorage.setItem(`application_${jobId}_step`, step.toString());
+  }, [jobId, selectedResume, coverLetter, chatbotResponses, step]);
 
   // Handle successful submission
   useEffect(() => {
@@ -54,57 +86,117 @@ const ApplicationForm = () => {
     }
   }, [navigate, submitSuccess]);
 
+  // Validation
+  const validateStep = (currentStep) => {
+    const errors = {};
+
+    switch (currentStep) {
+      case 1:
+        if (!selectedResume) {
+          errors.resume = "Please select a resume";
+        }
+        break;
+      case 2:
+        if (!coverLetter.trim()) {
+          errors.coverLetter = "Cover letter is required";
+        } else if (coverLetter.length < 150) {
+          errors.coverLetter = "Cover letter must be at least 150 characters";
+        }
+        break;
+      case 3:
+        if (!chatbotResponses.length) {
+          errors.responses = "Please complete all screening questions";
+        } else if (
+          job?.screeningQuestions?.some(
+            (q, i) =>
+              q.required &&
+              (!chatbotResponses[i] || !chatbotResponses[i].trim())
+          )
+        ) {
+          errors.responses = "Please answer all required questions";
+        }
+        break;
+      default:
+        break;
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   // Form navigation
   const nextStep = () => {
-    if (step === 1 && !selectedResume) {
-      toast.error("Please select a resume to continue");
-      return;
+    if (validateStep(step)) {
+      setStep(step + 1);
+      setValidationErrors({});
     }
-    if (step === 2 && (!coverLetter.trim() || coverLetter.length < 150)) {
-      toast.error(
-        "Please write a detailed cover letter (minimum 150 characters)"
-      );
-      return;
-    }
-    setStep(step + 1);
   };
 
   const prevStep = () => {
     setStep(step - 1);
+    setValidationErrors({});
   };
 
   // Form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (
-      !selectedResume ||
-      !coverLetter.trim() ||
-      chatbotResponses.length === 0
-    ) {
-      toast.error("Please complete all sections before submitting");
+    if (!validateStep(3)) {
       return;
     }
 
-    dispatch(
-      submitJobApplication({
-        jobId,
-        resumeId: selectedResume,
-        coverLetter,
-        responses: chatbotResponses,
-      })
-    );
+    setIsSubmitting(true);
+
+    try {
+      dispatch(
+        submitJobApplication({
+          jobId,
+          resumeId: selectedResume,
+          coverLetter,
+          responses: chatbotResponses,
+        })
+      );
+    } catch (error) {
+      toast.error("Failed to submit application. Please try again.");
+      setIsSubmitting(false);
+    }
   };
+
+  // Loading states
   if (jobLoading || resumesLoading) {
     return <Loading />;
   }
 
   if (jobError || resumesError) {
-    return <Message variant="error">{jobError || resumesError}</Message>;
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <Message variant="error">
+          {jobError || resumesError}
+          <button
+            onClick={() => navigate(-1)}
+            className="mt-4 text-primary-600 hover:text-primary-700 font-medium"
+          >
+            Go Back
+          </button>
+        </Message>
+      </div>
+    );
   }
 
   if (!job) {
-    return <Message variant="error">Job not found</Message>;
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <Message variant="error">
+          Job not found
+          <button
+            onClick={() => navigate("/jobs")}
+            className="mt-4 text-primary-600 hover:text-primary-700 font-medium"
+          >
+            Browse Jobs
+          </button>
+        </Message>
+      </div>
+    );
   }
 
   return (
@@ -278,6 +370,11 @@ const ApplicationForm = () => {
                     {coverLetter.length} characters
                   </span>
                 </div>
+                {validationErrors.coverLetter && (
+                  <p className="text-error-500 text-sm mt-2">
+                    {validationErrors.coverLetter}
+                  </p>
+                )}
               </div>
               <div className="flex justify-between pt-4">
                 <button

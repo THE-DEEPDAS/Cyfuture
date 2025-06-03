@@ -1,0 +1,12 @@
+// Add these exports for backward compatibility with messageActions.js
+import { socket, emitTyping, sendMessage, markMessagesAsRead } from "./socket";
+import { retryManager } from "./retryManagerInstance";
+import { clientMessageQueue } from "./messageQueueInstance";
+
+export const stopTyping = (conversationId) => {
+  return emitTyping(conversationId, false);
+};
+
+// Re-export functions with compatibility names
+export { sendMessage as emitMessage };
+export { markMessagesAsRead as emitMarkRead };

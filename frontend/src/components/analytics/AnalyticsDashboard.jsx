@@ -313,6 +313,162 @@ const AnalyticsDashboard = () => {
               </div>
             </div>
           )}
+
+          {/* Hiring Funnel */}
+          <div className="bg-white rounded-xl shadow-soft p-6">
+            <h3 className="text-lg font-semibold mb-4">Hiring Funnel</h3>
+            <div className="relative pt-1">
+              {data.hiringFunnel?.map((stage, index) => (
+                <div key={index} className="mb-4">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm font-medium text-gray-700">
+                      {stage.label}
+                    </span>
+                    <span className="text-sm font-medium text-gray-900">
+                      {stage.value}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div
+                      className={`${
+                        index === 0
+                          ? "bg-blue-500"
+                          : index === 1
+                          ? "bg-indigo-500"
+                          : index === 2
+                          ? "bg-purple-500"
+                          : index === 3
+                          ? "bg-green-500"
+                          : "bg-emerald-500"
+                      } h-2.5 rounded-full transition-all duration-500`}
+                      style={{
+                        width: `${
+                          (stage.value / data.totalApplications) * 100 || 0
+                        }%`,
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Time-to-Hire Metrics */}
+          <div className="bg-white rounded-xl shadow-soft p-6">
+            <h3 className="text-lg font-semibold mb-4">Time-to-Hire Metrics</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-medium mb-2">Average Time to Hire</h4>
+                <div className="flex items-baseline">
+                  <span className="text-2xl font-bold text-primary-600">
+                    {data.timeToHireMetrics?.average || 0}
+                  </span>
+                  <span className="ml-2 text-gray-600">days</span>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-medium mb-2">Time in Each Stage</h4>
+                <div className="space-y-2">
+                  {Object.entries(data.timeToHireMetrics?.stages || {}).map(
+                    ([stage, days]) => (
+                      <div
+                        key={stage}
+                        className="flex justify-between items-center"
+                      >
+                        <span className="text-gray-600">{stage}</span>
+                        <span className="font-medium">{days} days</span>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-medium mb-2">Bottlenecks</h4>
+                <div className="space-y-2">
+                  {data.timeToHireMetrics?.bottlenecks?.map(
+                    (bottleneck, index) => (
+                      <div key={index} className="text-sm">
+                        <span
+                          className={`inline-block w-2 h-2 rounded-full mr-2 ${
+                            bottleneck.severity === "high"
+                              ? "bg-red-500"
+                              : bottleneck.severity === "medium"
+                              ? "bg-yellow-500"
+                              : "bg-green-500"
+                          }`}
+                        ></span>
+                        {bottleneck.stage}: {bottleneck.description}
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Source Analysis */}
+          <div className="bg-white rounded-xl shadow-soft p-6">
+            <h3 className="text-lg font-semibold mb-4">Candidate Sources</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-medium mb-3">Application Sources</h4>
+                <div className="space-y-3">
+                  {Object.entries(
+                    data.sourceAnalytics?.applicationSources || {}
+                  ).map(([source, count]) => (
+                    <div key={source} className="relative">
+                      <div className="flex justify-between mb-1">
+                        <span className="text-sm font-medium text-gray-600">
+                          {source}
+                        </span>
+                        <span className="text-sm font-medium text-gray-900">
+                          {count}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-primary-600 h-2 rounded-full"
+                          style={{
+                            width: `${
+                              (count / data.totalApplications) * 100 || 0
+                            }%`,
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-medium mb-3">Quality by Source</h4>
+                <div className="space-y-3">
+                  {Object.entries(
+                    data.sourceAnalytics?.qualityBySource || {}
+                  ).map(([source, score]) => (
+                    <div key={source} className="relative">
+                      <div className="flex justify-between mb-1">
+                        <span className="text-sm font-medium text-gray-600">
+                          {source}
+                        </span>
+                        <span className="text-sm font-medium text-gray-900">
+                          {score}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-green-600 h-2 rounded-full"
+                          style={{ width: `${score}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

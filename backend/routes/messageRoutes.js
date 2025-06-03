@@ -1,28 +1,34 @@
 import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
+import { messageLimiter } from "../utils/rateLimiter.js";
 import {
   getConversations,
-  getOrCreateConversation,
   getMessages,
   sendMessage,
-  markMessagesAsRead,
+  markAsRead,
+  getOrCreateConversation,
+  searchMessages,
+  getOnlineStatus,
 } from "../controllers/messageController.js";
 
 const router = express.Router();
 
-// @route   GET /api/messages/conversations
-router.get("/conversations", protect, getConversations);
+router.use(protect);
 
-// @route   POST /api/messages/conversations
-router.post("/conversations", protect, getOrCreateConversation);
+router
+  .route("/conversations")
+  .get(getConversations)
+  .post(getOrCreateConversation);
 
-// @route   GET /api/messages/conversations/:id
-router.get("/conversations/:id", protect, getMessages);
+router
+  .route("/conversations/:conversationId")
+  .get(getMessages)
+  .post(messageLimiter, sendMessage);
 
-// @route   POST /api/messages
-router.post("/", protect, sendMessage);
+router.route("/conversations/:conversationId/read").put(markAsRead);
 
-// @route   PUT /api/messages/read
-router.put("/read", protect, markMessagesAsRead);
+router.route("/conversations/:conversationId/search").get(searchMessages);
+
+router.route("/status/:userId").get(getOnlineStatus);
 
 export default router;
