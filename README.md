@@ -1,6 +1,6 @@
-# TalentMatch - Professional Resume Matching Platform
+# Medhavi - Professional Resume Matching Platform
 
-TalentMatch is a complete MERN stack application that connects employers with job seekers through AI-powered resume parsing and matching.
+Medhavi is a complete MERN stack application that connects employers with job seekers through AI-powered resume parsing and matching.
 
 ## Features
 
@@ -33,6 +33,7 @@ TalentMatch is a complete MERN stack application that connects employers with jo
 ### Installation
 
 1. Clone the repository
+
 ```
 git clone https://github.com/yourusername/talent-match.git
 cd talent-match
@@ -41,11 +42,13 @@ cd talent-match
 2. Create a `.env` file in the root directory based on `.env.example`
 
 3. Install dependencies
+
 ```
 npm run install:all
 ```
 
 4. Start the development server
+
 ```
 npm run dev
 ```
