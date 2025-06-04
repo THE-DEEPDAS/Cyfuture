@@ -3,7 +3,7 @@
 # Base stage for dependencies
 FROM node:18-alpine AS base
 WORKDIR /app
-ENV NODE_ENV=production
+ENV NODE_ENV=development
 
 # Backend build stage
 FROM base AS backend-build

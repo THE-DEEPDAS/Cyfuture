@@ -11,7 +11,7 @@
 ### Backend Environment Variables (.env)
 
 ```
-NODE_ENV=production
+NODE_ENV=development
 PORT=5000
 MONGO_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/<dbname>?retryWrites=true&w=majority
 JWT_SECRET=your_jwt_secret_here

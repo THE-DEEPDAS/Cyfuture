@@ -11,10 +11,6 @@ import "react-toastify/dist/ReactToastify.css";
 // Import store
 import store from "./store";
 
-// Import layouts and components
-import Header from "./components/common/Header.jsx";
-import Footer from "./components/common/Footer.jsx";
-
 // Import route guards
 import ProtectedRoute from "./components/common/ProtectedRoute";
 
@@ -48,7 +44,6 @@ function App() {
   return (
     <Provider store={store}>
       <div className="min-h-screen flex flex-col bg-gray-50">
-        <Header />
         <main className="flex-grow">
           <Routes>
             {/* Public routes */}
@@ -121,7 +116,6 @@ function App() {
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </main>
-        <Footer />
         <ToastContainer
           position="bottom-right"
           autoClose={5000}
