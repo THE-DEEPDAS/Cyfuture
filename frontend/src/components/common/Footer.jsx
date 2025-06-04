@@ -3,52 +3,60 @@ import { Link } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
 const Footer = () => {
+  const currentYear = new Date().getFullYear();
+
   return (
-    <footer className="bg-background-dark py-12 text-gray-300">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {/* Company info */}
-          <div>
-            <div className="flex items-center text-white text-xl font-semibold mb-4">
-              <FontAwesomeIcon
-                icon="briefcase"
-                className="text-primary-500 mr-2"
-              />
-              <span>Medhavi</span>
+    <footer className="bg-background-secondary mt-auto">
+      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
+          {/* Brand Section */}
+          <div className="space-y-4">
+            <div className="flex items-center">
+              <div className="flex items-center text-white text-xl font-semibold">
+                <FontAwesomeIcon
+                  icon="briefcase"
+                  className="text-primary-500 mr-2 h-6 w-6"
+                />
+                <span>Medhavi</span>
+              </div>
             </div>
-            <p className="text-sm mb-6">
-              Connecting top talent with leading companies through AI-powered
-              resume matching.
+            <p className="text-gray-400 text-sm leading-relaxed">
+              Your AI-powered career platform. Connecting top talent with
+              opportunities through intelligent matching and career guidance.
             </p>
             <div className="flex space-x-4">
               <a
                 href="#"
                 className="text-gray-400 hover:text-white transition-colors"
+                aria-label="LinkedIn"
               >
                 <FontAwesomeIcon icon={["fab", "linkedin"]} />
               </a>
               <a
                 href="#"
                 className="text-gray-400 hover:text-white transition-colors"
+                aria-label="Twitter"
               >
                 <FontAwesomeIcon icon={["fab", "twitter"]} />
               </a>
               <a
                 href="#"
                 className="text-gray-400 hover:text-white transition-colors"
+                aria-label="Facebook"
               >
                 <FontAwesomeIcon icon={["fab", "facebook"]} />
               </a>
               <a
                 href="#"
                 className="text-gray-400 hover:text-white transition-colors"
+                aria-label="Instagram"
               >
                 <FontAwesomeIcon icon={["fab", "instagram"]} />
               </a>
             </div>
           </div>
 
-          {/* For job seekers */}
+          {/* For Job Seekers */}
           <div>
             <h3 className="text-white font-medium text-lg mb-4">
               For Job Seekers
@@ -71,25 +79,25 @@ const Footer = () => {
                 </Link>
               </li>
               <li>
-                <a
-                  href="#"
+                <Link
+                  to="/jobs"
                   className="text-sm text-gray-400 hover:text-white transition-colors"
                 >
                   Browse Jobs
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href="#"
+                <Link
+                  to="/resources"
                   className="text-sm text-gray-400 hover:text-white transition-colors"
                 >
                   Resume Tips
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
 
-          {/* For employers */}
+          {/* For Employers */}
           <div>
             <h3 className="text-white font-medium text-lg mb-4">
               For Employers
@@ -97,35 +105,35 @@ const Footer = () => {
             <ul className="space-y-3">
               <li>
                 <Link
-                  to="/register"
+                  to="/post-job"
                   className="text-sm text-gray-400 hover:text-white transition-colors"
                 >
                   Post a Job
                 </Link>
               </li>
               <li>
-                <a
-                  href="#"
+                <Link
+                  to="/talent-search"
                   className="text-sm text-gray-400 hover:text-white transition-colors"
                 >
                   Talent Sourcing
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href="#"
+                <Link
+                  to="/employers"
                   className="text-sm text-gray-400 hover:text-white transition-colors"
                 >
                   Recruitment Solutions
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href="#"
+                <Link
+                  to="/pricing"
                   className="text-sm text-gray-400 hover:text-white transition-colors"
                 >
                   Pricing
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
@@ -140,7 +148,7 @@ const Footer = () => {
                   className="text-primary-500 mt-1 mr-3"
                 />
                 <span className="text-sm text-gray-400">
-                  support@Medhavi.com
+                  support@medhavi.com
                 </span>
               </li>
               <li className="flex items-start">
@@ -165,29 +173,32 @@ const Footer = () => {
           </div>
         </div>
 
-        <div className="border-t border-dark-700 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
-          <p className="text-sm text-gray-400">
-            &copy; {new Date().getFullYear()} Medhavi. All rights reserved.
-          </p>
-          <div className="mt-4 md:mt-0 flex space-x-6">
-            <a
-              href="#"
-              className="text-sm text-gray-400 hover:text-white transition-colors"
-            >
-              Privacy Policy
-            </a>
-            <a
-              href="#"
-              className="text-sm text-gray-400 hover:text-white transition-colors"
-            >
-              Terms of Service
-            </a>
-            <a
-              href="#"
-              className="text-sm text-gray-400 hover:text-white transition-colors"
-            >
-              Cookies
-            </a>
+        {/* Bottom Bar */}
+        <div className="border-t border-gray-700 mt-12 pt-8">
+          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+            <p className="text-sm text-gray-400">
+              &copy; {currentYear} Medhavi. All rights reserved.
+            </p>
+            <div className="flex space-x-6">
+              <Link
+                to="/privacy"
+                className="text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                Privacy Policy
+              </Link>
+              <Link
+                to="/terms"
+                className="text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                Terms of Service
+              </Link>
+              <Link
+                to="/contact"
+                className="text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                Contact Us
+              </Link>
+            </div>
           </div>
         </div>
       </div>

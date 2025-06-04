@@ -34,15 +34,18 @@ const protect = asyncHandler(async (req, res, next) => {
   }
 });
 
-// Middleware to check if user is a company
+// Middleware to check if user is a company or admin
 const companyOnly = (req, res, next) => {
-  if (req.user && req.user.role === "company") {
+  if (req.user && (req.user.role === "company" || req.user.isAdmin)) {
     next();
   } else {
     res.status(403);
-    throw new Error("Not authorized as a company");
+    throw new Error("Not authorized as a company or admin");
   }
 };
+
+// For backward compatibility
+const company = companyOnly;
 
 // Middleware to check if user is a candidate
 const candidate = (req, res, next) => {
@@ -54,4 +57,7 @@ const candidate = (req, res, next) => {
   }
 };
 
-export { protect, companyOnly, candidate };
+// For backward compatibility
+const admin = company;
+
+export { protect, companyOnly, company, admin, candidate };

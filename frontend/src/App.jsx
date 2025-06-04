@@ -1,9 +1,22 @@
-import React from "react";
+import React, { useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import { library } from "@fortawesome/fontawesome-svg-core";
 import { fas } from "@fortawesome/free-solid-svg-icons";
 import { far } from "@fortawesome/free-regular-svg-icons";
 import { fab } from "@fortawesome/free-brands-svg-icons";
+import { Provider } from "react-redux";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
+// Import store
+import store from "./store";
+
+// Import layouts and components
+import Header from "./components/common/Header.jsx";
+import Footer from "./components/common/Footer.jsx";
+
+// Import route guards
+import ProtectedRoute from "./components/common/ProtectedRoute";
 
 // Import layouts
 import MainLayout from "./layouts/MainLayout.jsx";
@@ -26,7 +39,6 @@ import CandidateReview from "./pages/company/CandidateReview.jsx";
 import CompanyMessages from "./pages/company/Messages.jsx";
 import CompanyAnalytics from "./pages/company/Analytics.jsx";
 import CandidateAnalysis from "./pages/company/CandidateAnalysis.jsx";
-import ProtectedRoute from "./components/common/ProtectedRoute.jsx";
 import NotFoundPage from "./pages/NotFoundPage.jsx";
 
 // Add FontAwesome icons to library
@@ -34,60 +46,96 @@ library.add(fas, far, fab);
 
 function App() {
   return (
-    <div className="app-container">
-      <Routes>
-        {/* Public routes */}
-        <Route element={<MainLayout />}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-        </Route>
+    <Provider store={store}>
+      <div className="min-h-screen flex flex-col bg-gray-50">
+        <Header />
+        <main className="flex-grow">
+          <Routes>
+            {/* Public routes */}
+            <Route element={<MainLayout />}>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+            </Route>
 
-        {/* Candidate routes */}
-        <Route element={<ProtectedRoute role="candidate" />}>
-          <Route element={<DashboardLayout type="candidate" />}>
-            <Route path="/candidate" element={<CandidateDashboard />} />
-            <Route path="/candidate/jobs" element={<JobSearch />} />
-            <Route path="/candidate/resume" element={<ResumeManager />} />
-            <Route
-              path="/candidate/resume-profile"
-              element={<ResumeProfile />}
-            />
-            <Route
-              path="/candidate/resume-profile/:resumeId"
-              element={<ResumeProfile />}
-            />
-            <Route path="/candidate/messages" element={<CandidateMessages />} />
-            <Route
-              path="/candidate/jobs/:jobId/apply"
-              element={<ApplicationForm />}
-            />
-            <Route
-              path="/candidate/applications/:id"
-              element={<ApplicationDetail />}
-            />
-          </Route>
-        </Route>
+            {/* Candidate routes */}
+            <Route element={<ProtectedRoute role="candidate" />}>
+              <Route element={<DashboardLayout type="candidate" />}>
+                <Route path="/candidate" element={<CandidateDashboard />} />
+                <Route path="/candidate/jobs" element={<JobSearch />} />
+                <Route path="/candidate/resume" element={<ResumeManager />} />
+                <Route
+                  path="/candidate/resume-profile"
+                  element={<ResumeProfile />}
+                />
+                <Route
+                  path="/candidate/resume-profile/:resumeId"
+                  element={<ResumeProfile />}
+                />
+                <Route
+                  path="/candidate/messages"
+                  element={<CandidateMessages />}
+                />
+                <Route
+                  path="/candidate/jobs/:jobId/apply"
+                  element={<ApplicationForm />}
+                />
+                <Route
+                  path="/candidate/applications/:id"
+                  element={<ApplicationDetail />}
+                />
+              </Route>
+            </Route>
 
-        {/* Company routes */}
-        <Route element={<ProtectedRoute role="company" />}>
-          <Route element={<DashboardLayout type="company" />}>
-            <Route path="/company" element={<CompanyDashboard />} />
-            <Route path="/company/jobs" element={<JobPostings />} />
-            <Route path="/company/candidates" element={<CandidateReview />} />
-            <Route
-              path="/company/candidates/:id/analysis"
-              element={<CandidateAnalysis />}
-            />
-            <Route path="/company/messages" element={<CompanyMessages />} />
-            <Route path="/company/analytics" element={<CompanyAnalytics />} />
-          </Route>
-        </Route>
+            {/* Company/Admin Routes - Company users are admins for their own company */}
+            <Route element={<ProtectedRoute role="company" />}>
+              <Route element={<DashboardLayout type="company" />}>
+                <Route path="/company" element={<CompanyDashboard />} />
+                <Route
+                  path="/company/dashboard"
+                  element={<CompanyDashboard />}
+                />
+                <Route path="/company/jobs" element={<JobPostings />} />
+                <Route path="/company/jobs/create" element={<JobPostings />} />
+                <Route
+                  path="/company/jobs/:id/edit"
+                  element={<JobPostings />}
+                />
+                <Route
+                  path="/company/candidates"
+                  element={<CandidateReview />}
+                />
+                <Route
+                  path="/company/candidates/:id/analysis"
+                  element={<CandidateAnalysis />}
+                />
+                <Route path="/company/messages" element={<CompanyMessages />} />
+                <Route
+                  path="/company/analytics"
+                  element={<CompanyAnalytics />}
+                />
+              </Route>
+            </Route>
 
-        {/* 404 page */}
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </div>
+            {/* 404 page */}
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </main>
+        <Footer />
+        <ToastContainer
+          position="bottom-right"
+          autoClose={5000}
+          hideProgressBar={false}
+          newestOnTop={false}
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+          theme="colored"
+        />
+      </div>
+    </Provider>
   );
 }
 

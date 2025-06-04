@@ -1,9 +1,5 @@
 import express from "express";
-import {
-  protect,
-  companyOnly,
-  candidate,
-} from "../middleware/authMiddleware.js";
+import { protect, company } from "../middleware/authMiddleware.js";
 import {
   createJob,
   getJobs,
@@ -11,44 +7,28 @@ import {
   updateJob,
   deleteJob,
   getCompanyJobs,
+  applyForJob,
   matchCandidates,
+  getJobApplications,
 } from "../controllers/jobController.js";
 
 const router = express.Router();
 
-// @desc    Create new job
-// @route   POST /api/jobs
-// @access  Private
-router.post("/", protect, companyOnly, createJob);
+// Public routes
+router.route("/").post(protect, company, createJob).get(getJobs);
 
-// @desc    Get all jobs
-// @route   GET /api/jobs
-// @access  Public
-router.get("/", getJobs);
+// Company routes
+router.route("/company/me").get(protect, company, getCompanyJobs);
 
-// @desc    Get jobs by company
-// @route   GET /api/jobs/company/me
-// @access  Private
-router.get("/company/me", protect, companyOnly, getCompanyJobs);
+// Job specific routes
+router
+  .route("/:id")
+  .get(getJob)
+  .put(protect, company, updateJob)
+  .delete(protect, company, deleteJob);
 
-// @desc    Get job by ID
-// @route   GET /api/jobs/:id
-// @access  Public
-router.get("/:id", getJob);
-
-// @desc    Update job
-// @route   PUT /api/jobs/:id
-// @access  Private
-router.put("/:id", protect, companyOnly, updateJob);
-
-// @desc    Delete job
-// @route   DELETE /api/jobs/:id
-// @access  Private
-router.delete("/:id", protect, companyOnly, deleteJob);
-
-// @desc    Match candidates to a job
-// @route   POST /api/jobs/:id/match
-// @access  Private
-router.post("/:id/match", protect, companyOnly, matchCandidates);
+router.route("/:id/apply").post(protect, applyForJob);
+router.route("/:id/applications").get(protect, company, getJobApplications);
+router.route("/:id/match").post(protect, company, matchCandidates);
 
 export default router;

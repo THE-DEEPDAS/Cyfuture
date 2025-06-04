@@ -267,6 +267,200 @@ export const searchMessages = asyncHandler(async (req, res) => {
   res.json(messages);
 });
 
+// @desc    Get messages for a specific job application
+// @route   GET /api/messages/jobs/:jobId
+// @access  Private
+export const getJobMessages = asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+  const { page = 1, limit = 20 } = req.query;
+
+  // Find conversation related to this job application
+  const conversation = await Conversation.findOne({
+    application: jobId,
+    participants: req.user._id,
+  });
+
+  if (!conversation) {
+    return res.json({ messages: [], page: parseInt(page), hasMore: false });
+  }
+
+  // Get messages for this conversation
+  const messages = await Message.find({
+    conversation: conversation._id,
+  })
+    .sort({ createdAt: -1 })
+    .skip((parseInt(page) - 1) * parseInt(limit))
+    .limit(parseInt(limit))
+    .populate("sender", "name email profileImage role");
+
+  // Mark messages as read
+  await Message.updateMany(
+    {
+      conversation: conversation._id,
+      receiver: req.user._id,
+      read: false,
+    },
+    { read: true }
+  );
+
+  // Reset unread count for this user
+  if (conversation.unreadCount.has(req.user._id.toString())) {
+    conversation.unreadCount.set(req.user._id.toString(), 0);
+    await conversation.save();
+  }
+
+  res.json({
+    messages,
+    page: parseInt(page),
+    hasMore: messages.length === parseInt(limit),
+  });
+});
+
+// @desc    Get messages for a specific resume
+// @route   GET /api/messages/resumes/:resumeId
+// @access  Private
+export const getResumeMessages = asyncHandler(async (req, res) => {
+  const { resumeId } = req.params;
+  const { page = 1, limit = 20 } = req.query;
+
+  // Find conversation related to this resume
+  const conversation = await Conversation.findOne({
+    resume: resumeId,
+    participants: req.user._id,
+  });
+
+  if (!conversation) {
+    return res.json({ messages: [], page: parseInt(page), hasMore: false });
+  }
+
+  // Get messages for this conversation
+  const messages = await Message.find({
+    conversation: conversation._id,
+  })
+    .sort({ createdAt: -1 })
+    .skip((parseInt(page) - 1) * parseInt(limit))
+    .limit(parseInt(limit))
+    .populate("sender", "name email profileImage role");
+
+  // Mark messages as read
+  await Message.updateMany(
+    {
+      conversation: conversation._id,
+      receiver: req.user._id,
+      read: false,
+    },
+    { read: true }
+  );
+
+  // Reset unread count for this user
+  if (conversation.unreadCount.has(req.user._id.toString())) {
+    conversation.unreadCount.set(req.user._id.toString(), 0);
+    await conversation.save();
+  }
+
+  res.json({
+    messages,
+    page: parseInt(page),
+    hasMore: messages.length === parseInt(limit),
+  });
+});
+
+// @desc    Send message to multiple job applicants
+// @route   POST /api/messages/applicants
+// @access  Private (Company Only)
+export const sendMessageToApplicants = asyncHandler(async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { applicantIds, content, jobId } = req.body;
+
+    if (!applicantIds || !content) {
+      res.status(400);
+      throw new Error("Applicant IDs and message content are required");
+    }
+
+    // Verify sender is company
+    if (req.user.role !== "company") {
+      res.status(403);
+      throw new Error("Not authorized. Company access required");
+    }
+
+    const messages = [];
+    const conversations = [];
+
+    // Process each applicant
+    for (const applicantId of applicantIds) {
+      // Find or create conversation
+      let conversation = await Conversation.findOne({
+        participants: { $all: [req.user._id, applicantId] },
+        application: jobId,
+      }).session(session);
+
+      if (!conversation) {
+        const unreadCount = new Map();
+        unreadCount.set(applicantId.toString(), 1);
+
+        const [newConversation] = await Conversation.create(
+          [
+            {
+              participants: [req.user._id, applicantId],
+              application: jobId,
+              unreadCount,
+            },
+          ],
+          { session }
+        );
+        conversation = newConversation;
+        conversations.push(conversation);
+      }
+
+      // Create message
+      const [message] = await Message.create(
+        [
+          {
+            sender: req.user._id,
+            receiver: applicantId,
+            content,
+            type: "text",
+            conversation: conversation._id,
+          },
+        ],
+        { session }
+      );
+
+      // Update conversation
+      conversation.lastMessage = message._id;
+      conversation.unreadCount.set(
+        applicantId.toString(),
+        (conversation.unreadCount.get(applicantId.toString()) || 0) + 1
+      );
+      await conversation.save({ session });
+
+      messages.push(message);
+    }
+
+    await session.commitTransaction();
+
+    // Populate and return messages
+    const populatedMessages = await Message.find({
+      _id: { $in: messages.map((m) => m._id) },
+    })
+      .populate("sender", "name email profileImage role")
+      .populate("receiver", "name email profileImage role");
+
+    res.status(201).json({
+      messages: populatedMessages,
+      conversations,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+});
+
 // @desc    Get user online status
 // @route   GET /api/messages/status/:userId
 // @access  Private

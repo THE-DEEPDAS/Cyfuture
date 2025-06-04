@@ -23,30 +23,46 @@ export const createJob = asyncHandler(async (req, res) => {
     salary,
     shortlistCount,
     expiresAt,
+    screeningQuestions,
+    preferredSkills,
+    llmEvaluation,
   } = req.body;
 
+  // Basic validation
+  if (!title || !description || !location || !type || !experience) {
+    res.status(400);
+    throw new Error("Please fill all required fields");
+  }
+
+  // Create job with company reference
   const job = await Job.create({
-    company: req.user.id,
+    company: req.user._id,
     title,
     description,
-    requirements: Array.isArray(requirements)
-      ? requirements
-      : requirements.split("\n").filter((item) => item.trim() !== ""),
     location,
     type,
     experience,
+    salary,
+    requirements,
     skills: Array.isArray(skills)
       ? skills
-      : skills
-          .split(",")
-          .map((skill) => skill.trim())
-          .filter((skill) => skill !== ""),
-    salary,
-    shortlistCount: shortlistCount || 10,
+      : skills.split(",").map((skill) => skill.trim()),
+    requiredSkills: Array.isArray(requiredSkills)
+      ? requiredSkills
+      : requiredSkills.split(",").map((skill) => skill.trim()),
+    shortlistCount,
     expiresAt,
+    screeningQuestions,
+    preferredSkills,
+    llmEvaluation,
   });
 
-  res.status(201).json(job);
+  if (job) {
+    res.status(201).json(job);
+  } else {
+    res.status(400);
+    throw new Error("Invalid job data");
+  }
 });
 
 /**
@@ -66,13 +82,14 @@ export const getJobs = asyncHandler(async (req, res) => {
   } = req.query;
 
   // Build filter object
-  const filter = {};
+  const filter = { isActive: true };
 
   // Add search filter (title and description)
   if (search) {
     filter.$or = [
       { title: { $regex: search, $options: "i" } },
       { description: { $regex: search, $options: "i" } },
+      { skills: { $in: [new RegExp(search, "i")] } },
     ];
   }
 
@@ -94,7 +111,7 @@ export const getJobs = asyncHandler(async (req, res) => {
 
   const total = await Job.countDocuments(filter);
   const jobs = await Job.find(filter)
-    .populate("company", "name logo")
+    .populate("company", "name companyName companyLogo")
     .limit(limit)
     .skip((page - 1) * limit)
     .sort({ createdAt: -1 });
@@ -115,7 +132,7 @@ export const getJobs = asyncHandler(async (req, res) => {
 export const getJob = asyncHandler(async (req, res) => {
   const job = await Job.findById(req.params.id).populate(
     "company",
-    "name logo"
+    "name companyName companyLogo companyDescription"
   );
 
   if (!job) {
@@ -139,9 +156,9 @@ export const updateJob = asyncHandler(async (req, res) => {
     throw new Error("Job not found");
   }
 
-  // Verify company ownership
-  if (job.company.toString() !== req.user.id) {
-    res.status(403);
+  // Check if user is the job's company
+  if (job.company.toString() !== req.user._id.toString()) {
+    res.status(401);
     throw new Error("Not authorized to update this job");
   }
 
@@ -155,7 +172,7 @@ export const updateJob = asyncHandler(async (req, res) => {
 
 /**
  * @desc    Delete job
- * @route   DELETE /api/jobs/:id
+ * * @route   DELETE /api/jobs/:id
  * @access  Private/Company
  */
 export const deleteJob = asyncHandler(async (req, res) => {
@@ -166,13 +183,14 @@ export const deleteJob = asyncHandler(async (req, res) => {
     throw new Error("Job not found");
   }
 
-  // Verify company ownership
-  if (job.company.toString() !== req.user.id) {
-    res.status(403);
+  // Check if user is the job's company
+  if (job.company.toString() !== req.user._id.toString()) {
+    res.status(401);
     throw new Error("Not authorized to delete this job");
   }
 
   await job.remove();
+
   res.json({ message: "Job removed" });
 });
 
@@ -182,7 +200,9 @@ export const deleteJob = asyncHandler(async (req, res) => {
  * @access  Private/Company
  */
 export const getCompanyJobs = asyncHandler(async (req, res) => {
-  const jobs = await Job.find({ company: req.user.id }).sort({ createdAt: -1 });
+  const jobs = await Job.find({ company: req.user._id }).sort({
+    createdAt: -1,
+  });
   res.json(jobs);
 });
 
@@ -253,4 +273,123 @@ export const matchCandidates = asyncHandler(async (req, res) => {
       analysis: app.llmAnalysis,
     })),
   });
+});
+
+/**
+ * @desc    Apply for a job
+ * @route   POST /api/jobs/:id/apply
+ * @access  Private/Candidate
+ */
+export const applyForJob = asyncHandler(async (req, res) => {
+  const { resumeId, coverLetter, questions } = req.body;
+
+  // Validate resume
+  if (!resumeId) {
+    res.status(400);
+    throw new Error("Please select a resume");
+  }
+
+  // Get job and check if it exists
+  const job = await Job.findById(req.params.id);
+  if (!job) {
+    res.status(404);
+    throw new Error("Job not found");
+  }
+
+  // Check if job is still active
+  if (!job.isActive) {
+    res.status(400);
+    throw new Error("This job is no longer accepting applications");
+  }
+
+  // Check if user has already applied
+  const existingApplication = await Application.findOne({
+    job: job._id,
+    candidate: req.user._id,
+  });
+
+  if (existingApplication) {
+    res.status(400);
+    throw new Error("You have already applied for this job");
+  }
+
+  // Get the resume
+  const resume = await Resume.findOne({
+    _id: resumeId,
+    user: req.user._id,
+  });
+
+  if (!resume) {
+    res.status(404);
+    throw new Error("Resume not found");
+  }
+
+  // Create application
+  const application = await Application.create({
+    job: job._id,
+    company: job.company,
+    candidate: req.user._id,
+    resume: resume._id,
+    coverLetter,
+    screeningAnswers: questions,
+  });
+
+  if (application) {
+    // Notify company about new application
+    await createNotification({
+      user: job.company,
+      type: "NEW_APPLICATION",
+      title: "New Job Application",
+      message: `${req.user.name} has applied for ${job.title}`,
+      reference: {
+        type: "Application",
+        id: application._id,
+      },
+    });
+
+    // If LLM evaluation is enabled, analyze the candidate
+    if (job.llmEvaluation) {
+      const analysis = await analyzeCandidate(resume.parsedData, job);
+      application.llmAnalysis = analysis;
+      await application.save();
+    }
+
+    res.status(201).json(application);
+  } else {
+    res.status(400);
+    throw new Error("Error submitting application");
+  }
+});
+
+/**
+ * @desc    Get applications for a specific job
+ * @route   GET /api/jobs/:id/applications
+ * @access  Private/Company
+ */
+export const getJobApplications = asyncHandler(async (req, res) => {
+  const job = await Job.findById(req.params.id);
+
+  if (!job) {
+    res.status(404);
+    throw new Error("Job not found");
+  }
+
+  // Check if user is the job's company
+  if (job.company.toString() !== req.user._id.toString()) {
+    res.status(401);
+    throw new Error("Not authorized to view these applications");
+  }
+
+  const applications = await Application.find({ job: job._id })
+    .populate({
+      path: "candidate",
+      select: "name email preferredLanguage",
+    })
+    .populate({
+      path: "resume",
+      select: "parsedData title",
+    })
+    .sort({ createdAt: -1 });
+
+  res.json(applications);
 });

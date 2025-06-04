@@ -1,5 +1,5 @@
 import express from "express";
-import { protect } from "../middleware/authMiddleware.js";
+import { protect, company } from "../middleware/authMiddleware.js";
 import { messageLimiter } from "../utils/rateLimiter.js";
 import {
   getConversations,
@@ -9,6 +9,9 @@ import {
   getOrCreateConversation,
   searchMessages,
   getOnlineStatus,
+  sendMessageToApplicants,
+  getJobMessages,
+  getResumeMessages,
 } from "../controllers/messageController.js";
 
 const router = express.Router();
@@ -30,5 +33,12 @@ router.route("/conversations/:conversationId/read").put(markAsRead);
 router.route("/conversations/:conversationId/search").get(searchMessages);
 
 router.route("/status/:userId").get(getOnlineStatus);
+
+router
+  .route("/job/:jobId")
+  .post(company, sendMessageToApplicants)
+  .get(company, getJobMessages);
+
+router.route("/resume/:resumeId").get(getResumeMessages);
 
 export default router;

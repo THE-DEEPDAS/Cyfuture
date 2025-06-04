@@ -1,10 +1,8 @@
 import axios from "axios";
 
-// Create a custom axios instance with the base URL from environment variables
-const baseURL = import.meta.env.VITE_API_URL;
-
+// Create a custom axios instance
 const api = axios.create({
-  baseURL,
+  baseURL: "/api", // Will be proxied through Vite
   headers: {
     "Content-Type": "application/json",
   },
@@ -13,7 +11,7 @@ const api = axios.create({
 // Add a request interceptor to include authentication token
 api.interceptors.request.use(
   (config) => {
-    // Get token from localStorage
+    // Get token directly from localStorage
     const token = localStorage.getItem("token");
 
     // If token exists, add it to the authorization header
@@ -32,11 +30,11 @@ api.interceptors.response.use(
   (error) => {
     // Handle authentication errors
     if (error.response && error.response.status === 401) {
-      // Clear token and redirect to login if unauthorized
+      // Clear token on auth error
       localStorage.removeItem("token");
+      // Redirect to login
       window.location.href = "/login";
     }
-
     return Promise.reject(error);
   }
 );
