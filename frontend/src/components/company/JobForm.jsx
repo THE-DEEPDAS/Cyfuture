@@ -6,7 +6,7 @@ import {
   faBars,
   faGripLines,
 } from "@fortawesome/free-solid-svg-icons";
-import axios from "axios";
+import api from "../../utils/api";
 import { useAuth } from "../../context/AuthContext";
 import { toast } from "react-toastify";
 
@@ -150,9 +150,7 @@ const JobForm = ({ job, onSave, onCancel }) => {
       // Convert requirements string to array
       const requirementsArray = formData.requirements
         .split("\n")
-        .filter((item) => item.trim() !== "");
-
-      // Convert skills string to array
+        .filter((item) => item.trim() !== ""); // Convert skills string to array
       const skillsArray = formData.skills
         .split(",")
         .map((skill) => skill.trim())
@@ -166,6 +164,7 @@ const JobForm = ({ job, onSave, onCancel }) => {
         type: formData.type,
         experience: formData.experience,
         skills: skillsArray,
+        requiredSkills: skillsArray, // Adding requiredSkills field for backend compatibility
         salary: {
           min: Number(formData.salaryMin),
           max: Number(formData.salaryMax),
@@ -177,15 +176,14 @@ const JobForm = ({ job, onSave, onCancel }) => {
         screeningQuestions: formData.screeningQuestions,
         llmEvaluation: formData.llmEvaluation,
       };
-
       let result;
       if (job?._id) {
         // Update existing job
-        result = await axios.put(`/api/jobs/${job._id}`, jobData);
+        result = await api.put(`/api/jobs/${job._id}`, jobData);
         toast.success("Job updated successfully");
       } else {
         // Create new job
-        result = await axios.post("/api/jobs", jobData);
+        result = await api.post("/api/jobs", jobData);
         toast.success("Job posted successfully");
       }
 

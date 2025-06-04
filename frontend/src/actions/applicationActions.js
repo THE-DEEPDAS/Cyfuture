@@ -3,7 +3,6 @@ import api from "../utils/api";
 export const submitJobApplication = (applicationData) => async (dispatch) => {
   try {
     dispatch({ type: "APPLICATION_SUBMIT_REQUEST" });
-
     const { data } = await api.post(
       `/api/applications/${applicationData.jobId}`,
       {

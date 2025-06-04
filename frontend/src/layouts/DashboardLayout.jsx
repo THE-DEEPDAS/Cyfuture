@@ -19,10 +19,41 @@ const SidebarLink = ({ to, icon, label, active }) => (
 );
 
 const DashboardLayout = ({ type }) => {
-  const { logout, user } = useAuth();
+  const { logout, user, isAuthenticated } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  console.log(
+    "DashboardLayout rendered with type:",
+    type,
+    "user:",
+    user,
+    "isAuthenticated:",
+    isAuthenticated,
+    "path:",
+    location.pathname
+  );
+
+  // Check if user role matches layout type
+  React.useEffect(() => {
+    if (user && type) {
+      console.log(
+        `Checking if user role (${user.role}) matches layout type (${type})`
+      );
+      if (type === "company" && user.role !== "company") {
+        console.log(
+          "User is not a company, redirecting to candidate dashboard"
+        );
+        navigate("/candidate");
+      } else if (type === "candidate" && user.role !== "candidate") {
+        console.log(
+          "User is not a candidate, redirecting to company dashboard"
+        );
+        navigate("/company");
+      }
+    }
+  }, [user, type, navigate]);
 
   // Define navigation links based on user type
   const getNavLinks = () => {

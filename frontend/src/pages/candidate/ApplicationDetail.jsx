@@ -12,7 +12,7 @@ import {
   faBuilding,
   faRobot,
 } from "@fortawesome/free-solid-svg-icons";
-import axios from "axios";
+import api from "../../utils/api";
 import { toast } from "react-toastify";
 import { useAuth } from "../../context/AuthContext";
 
@@ -45,7 +45,7 @@ const ApplicationDetail = () => {
     const fetchApplication = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`/api/applications/${id}`);
+        const response = await api.get(`/applications/${id}`);
         setApplication(response.data);
         setLoading(false);
       } catch (error) {

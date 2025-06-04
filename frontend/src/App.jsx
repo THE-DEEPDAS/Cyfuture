@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import { Routes, Route } from "react-router-dom";
 import { library } from "@fortawesome/fontawesome-svg-core";
 import { fas } from "@fortawesome/free-solid-svg-icons";
@@ -85,7 +85,14 @@ function App() {
             {/* Company/Admin Routes - Company users are admins for their own company */}
             <Route element={<ProtectedRoute role="company" />}>
               <Route element={<DashboardLayout type="company" />}>
-                <Route path="/company" element={<CompanyDashboard />} />
+                <Route
+                  path="/company"
+                  element={
+                    <React.Suspense fallback={<div>Loading...</div>}>
+                      <CompanyDashboard />
+                    </React.Suspense>
+                  }
+                />
                 <Route
                   path="/company/dashboard"
                   element={<CompanyDashboard />}

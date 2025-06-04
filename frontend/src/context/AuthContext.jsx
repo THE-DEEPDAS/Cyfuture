@@ -4,19 +4,34 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import api from "../utils/api.js";
 
+// Create context
 const AuthContext = createContext();
 
-export const useAuth = () => useContext(AuthContext);
+// Custom hook for using auth context
+// Define as a named function for better Fast Refresh compatibility
+function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+}
 
-export const AuthProvider = ({ children }) => {
+// Auth provider component
+const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  console.log("AuthProvider initialized");
+
   // Initialize auth state on app load
   useEffect(() => {
     const initAuth = async () => {
+      console.log("AuthContext: Initializing auth");
+      setLoading(true);
       const token = localStorage.getItem("token");
+      console.log("Auth initialization - Token exists:", !!token);
 
       if (token) {
         try {
@@ -24,7 +39,9 @@ export const AuthProvider = ({ children }) => {
           axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
           // Get user data
-          const { data } = await api.get(`/users/me`);
+          console.log("Fetching user data...");
+          const { data } = await api.get(`/api/users/me`);
+          console.log("User data fetched:", data);
           setUser(data);
         } catch (error) {
           console.error("Auth initialization failed:", error);
@@ -34,6 +51,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       setLoading(false);
+      console.log("AuthContext: Auth initialization complete");
     };
 
     initAuth();
@@ -42,24 +60,30 @@ export const AuthProvider = ({ children }) => {
   // Login function
   const login = async (credentials) => {
     try {
-      const { data } = await api.post(`/auth/login`, credentials);
+      const { data } = await api.post(`/api/auth/login`, credentials);
+      console.log("Login successful, user data:", data);
 
       localStorage.setItem("token", data.token);
       axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
 
       setUser(data.user);
 
+      console.log("User set in state:", data.user);
+
       toast.success("Login successful!");
 
       // Redirect based on user role
       if (data.user.role === "company") {
+        console.log("Redirecting to company dashboard");
         navigate("/company");
       } else {
+        console.log("Redirecting to candidate dashboard");
         navigate("/candidate");
       }
 
       return true;
     } catch (error) {
+      console.error("Login error:", error);
       toast.error(
         error.response?.data?.message || "Login failed. Please try again."
       );
@@ -70,7 +94,7 @@ export const AuthProvider = ({ children }) => {
   // Register function
   const register = async (userData) => {
     try {
-      const { data } = await api.post(`/auth/register`, userData);
+      const { data } = await api.post(`/api/auth/register`, userData);
 
       localStorage.setItem("token", data.token);
       axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
@@ -118,3 +142,6 @@ export const AuthProvider = ({ children }) => {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
+
+// Export both the provider component and the hook
+export { AuthProvider, useAuth };

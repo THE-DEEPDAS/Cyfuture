@@ -2,9 +2,10 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { testUserAuth } from "../../utils/apiTest.js";
 
 const CompanyDashboard = () => {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState({
     activeJobs: 0,
@@ -15,8 +16,36 @@ const CompanyDashboard = () => {
   const [recentApplications, setRecentApplications] = useState([]);
   const [jobPostings, setJobPostings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [authStatus, setAuthStatus] = useState(null);
+
+  // Ensure the user is a company
+  useEffect(() => {
+    console.log("CompanyDashboard: Checking user role...", user);
+    if (user && user.role !== "company") {
+      console.log("User is not a company, redirecting to candidate dashboard");
+      navigate("/candidate");
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
+    console.log(
+      "CompanyDashboard mounted, user:",
+      user,
+      "isAuthenticated:",
+      isAuthenticated
+    );
+
+    // Test authentication
+    const checkAuth = async () => {
+      const result = await testUserAuth();
+      setAuthStatus(result);
+      if (!result.success) {
+        console.error("Authentication test failed in dashboard:", result);
+      }
+    };
+
+    checkAuth();
+
     const fetchDashboardData = async () => {
       try {
         // In a real application, these would be actual API calls

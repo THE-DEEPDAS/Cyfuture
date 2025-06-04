@@ -10,6 +10,8 @@ const MainLayout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
 
+  console.log("MainLayout rendered, path:", location.pathname, "user:", user);
+
   // Handle scroll effect for navbar
   useEffect(() => {
     const handleScroll = () => {

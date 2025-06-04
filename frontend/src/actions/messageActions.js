@@ -36,10 +36,9 @@ export const startMessagePolling = (userId) => async (dispatch) => {
   if (pollInterval) {
     clearInterval(pollInterval);
   }
-
   const pollMessages = async () => {
     const lastPoll = localStorage.getItem("lastMessagePoll") || 0;
-    const { data } = await api.get(`/messages/updates?since=${lastPoll}`);
+    const { data } = await api.get(`/api/messages/updates?since=${lastPoll}`);
 
     if (data.messages && data.messages.length > 0) {
       dispatch({

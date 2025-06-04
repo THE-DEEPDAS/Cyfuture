@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useAuth } from "../../context/AuthContext.jsx";
 import JobForm from "../../components/company/JobForm.jsx";
-import axios from "axios";
+import api from "../../utils/api";
 import { toast } from "react-toastify";
 
 const JobPostings = () => {
@@ -20,7 +20,9 @@ const JobPostings = () => {
   const fetchJobs = async () => {
     try {
       setLoading(true);
-      const response = await axios.get("/api/jobs/company/me");
+      console.log("Fetching company jobs...");
+      const response = await api.get("/api/jobs/company/me");
+      console.log("Fetched jobs:", response.data);
       setJobs(response.data);
       setLoading(false);
     } catch (error) {
@@ -134,7 +136,7 @@ const JobPostings = () => {
 
       const newStatus = !job.isActive;
 
-      await axios.put(`/api/jobs/${jobId}`, { isActive: newStatus });
+      await api.put(`/api/jobs/${jobId}`, { isActive: newStatus });
 
       // Update job in state
       setJobs(
@@ -154,7 +156,7 @@ const JobPostings = () => {
   const deleteJob = async (jobId) => {
     if (window.confirm("Are you sure you want to delete this job posting?")) {
       try {
-        await axios.delete(`/api/jobs/${jobId}`);
+        await api.delete(`/api/jobs/${jobId}`);
 
         // Remove job from state
         setJobs(jobs.filter((job) => job._id !== jobId));

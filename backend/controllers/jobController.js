@@ -20,6 +20,7 @@ export const createJob = asyncHandler(async (req, res) => {
     type,
     experience,
     skills,
+    requiredSkills,
     salary,
     shortlistCount,
     expiresAt,
@@ -27,11 +28,37 @@ export const createJob = asyncHandler(async (req, res) => {
     preferredSkills,
     llmEvaluation,
   } = req.body;
-
   // Basic validation
   if (!title || !description || !location || !type || !experience) {
     res.status(400);
     throw new Error("Please fill all required fields");
+  }
+
+  // Validate skills
+  const skillsArray = Array.isArray(skills)
+    ? skills
+    : skills.split(",").map((skill) => skill.trim());
+
+  // If requiredSkills is not provided, use skills as requiredSkills
+  const requiredSkillsArray = Array.isArray(requiredSkills)
+    ? requiredSkills
+    : requiredSkills
+    ? requiredSkills.split(",").map((skill) => skill.trim())
+    : skillsArray;
+
+  // Validate requirements
+  const requirementsArray = Array.isArray(requirements)
+    ? requirements
+    : requirements.split("\n").filter((req) => req.trim());
+
+  if (!requirementsArray.length) {
+    res.status(400);
+    throw new Error("At least one job requirement is required");
+  }
+
+  if (!skillsArray.length) {
+    res.status(400);
+    throw new Error("At least one skill is required");
   }
 
   // Create job with company reference
@@ -43,13 +70,9 @@ export const createJob = asyncHandler(async (req, res) => {
     type,
     experience,
     salary,
-    requirements,
-    skills: Array.isArray(skills)
-      ? skills
-      : skills.split(",").map((skill) => skill.trim()),
-    requiredSkills: Array.isArray(requiredSkills)
-      ? requiredSkills
-      : requiredSkills.split(",").map((skill) => skill.trim()),
+    requirements: requirementsArray,
+    skills: skillsArray,
+    requiredSkills: requiredSkillsArray,
     shortlistCount,
     expiresAt,
     screeningQuestions,

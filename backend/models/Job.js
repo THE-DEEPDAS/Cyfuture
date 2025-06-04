@@ -17,31 +17,7 @@ const jobSchema = new mongoose.Schema(
       required: [true, "Job description is required"],
     },
     requirements: {
-      type: {
-        experience: {
-          type: Number,
-          required: true,
-          min: 0,
-        },
-        education: {
-          level: {
-            type: String,
-            enum: [
-              "high school",
-              "associate",
-              "bachelor",
-              "master",
-              "doctorate",
-            ],
-            required: true,
-          },
-          field: String,
-        },
-        projectCount: {
-          type: Number,
-          default: 0,
-        },
-      },
+      type: [String],
       required: [true, "Job requirements are required"],
     },
     location: {
@@ -103,12 +79,10 @@ const jobSchema = new mongoose.Schema(
         min: 1,
       },
     },
-    requiredSkills: [
-      {
-        type: String,
-        required: true,
-      },
-    ],
+    requiredSkills: {
+      type: [String],
+      required: [true, "Required skills are required"],
+    },
     preferredSkills: [
       {
         type: String,

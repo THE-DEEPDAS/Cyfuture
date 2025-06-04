@@ -5,7 +5,7 @@ export const getJobDetails = (jobId) => async (dispatch) => {
   try {
     dispatch({ type: "JOB_DETAILS_REQUEST" });
 
-    const { data } = await api.get(`/jobs/${jobId}`);
+    const { data } = await api.get(`/api/jobs/${jobId}`);
 
     dispatch({
       type: "JOB_DETAILS_SUCCESS",
@@ -23,7 +23,7 @@ export const getJobDetails = (jobId) => async (dispatch) => {
 export const getJobApplications = (jobId) => async (dispatch) => {
   try {
     dispatch({ type: "JOB_APPLICATIONS_REQUEST" });
-    const { data } = await api.get(`/jobs/${jobId}/applications`);
+    const { data } = await api.get(`/api/jobs/${jobId}/applications`);
 
     dispatch({
       type: "JOB_APPLICATIONS_SUCCESS",
@@ -42,7 +42,7 @@ export const updateApplicationStatus =
     try {
       dispatch({ type: "APPLICATION_UPDATE_REQUEST" });
       const { data } = await api.put(
-        `/jobs/${jobId}/applications/${applicationId}`,
+        `/api/jobs/${jobId}/applications/${applicationId}`,
         {
           status,
         }

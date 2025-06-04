@@ -13,6 +13,10 @@ const LoginPage = () => {
 
   // Redirect if already logged in
   if (isAuthenticated) {
+    console.log(
+      "LoginPage: User is authenticated, redirecting to dashboard. User:",
+      user
+    );
     return (
       <Navigate to={user.role === "candidate" ? "/candidate" : "/company"} />
     );
@@ -26,7 +30,9 @@ const LoginPage = () => {
     e.preventDefault();
     setLoading(true);
     try {
+      console.log("LoginPage: Attempting login with:", formData.email);
       await login(formData);
+      console.log("LoginPage: Login completed");
     } catch (error) {
       console.error("Login error:", error);
     } finally {
