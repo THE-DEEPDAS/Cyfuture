@@ -22,82 +22,8 @@ export const parseResumeText = async (fileBuffer, fileName = "") => {
 
     // Convert buffer to text - this is a simple conversion that works for text files
     // For PDF files, we'll get some garbage text but can still extract some information
-    const text = fileBuffer.toString("utf-8");
+    const text = fileBuffer.toString('utf-8');
     console.log("Converted file to text, length:", text.length);
-
-    // Extract metadata from filename if available
-    const metadata = {
-      fileName: fileName || "Unnamed Resume",
-      uploadDate: new Date(),
-      fileType: fileName ? fileName.split(".").pop().toLowerCase() : "unknown",
-    };
-
-    // Extract sections
-    const sections = extractSections(text);
-    console.log("Found sections:", Object.keys(sections));
-
-    // Parse data
-    const parsedData = {
-      skills: [],
-      experience: [],
-      projects: [],
-    };
-
-    // Extract skills
-    const skillsSection = Object.keys(sections).find(
-      (key) =>
-        key.toUpperCase().includes("SKILL") ||
-        key.toUpperCase().includes("TECHNICAL")
-    );
-    if (skillsSection) {
-      parsedData.skills = extractSkills(sections[skillsSection]);
-    } else {
-      // Try to extract skills from the entire text if no specific section found
-      parsedData.skills = extractSkills(text);
-    }
-
-    // Extract experience
-    const experienceSection = Object.keys(sections).find(
-      (key) =>
-        key.toUpperCase().includes("EXPERIENCE") ||
-        key.toUpperCase().includes("EMPLOYMENT")
-    );
-    if (experienceSection) {
-      parsedData.experience = extractExperience(sections[experienceSection]);
-    }
-
-    // Extract projects
-    const projectsSection = Object.keys(sections).find((key) =>
-      key.toUpperCase().includes("PROJECT")
-    );
-    if (projectsSection) {
-      parsedData.projects = extractProjects(sections[projectsSection]);
-    }
-
-    console.log("Extraction results:");
-    console.log("Skills:", parsedData.skills.length);
-    console.log("Experience entries:", parsedData.experience.length);
-    console.log("Projects:", parsedData.projects.length);
-
-    return {
-      ...metadata,
-      parsedData,
-    };
-  } catch (error) {
-    console.error("Resume parsing error:", error);
-    // Return minimal data structure instead of throwing
-    return {
-      fileName: fileName || "Unnamed Resume",
-      uploadDate: new Date(),
-      fileType: fileName ? fileName.split(".").pop().toLowerCase() : "unknown",
-      parsedData: {
-        skills: [],
-        experience: [],
-        projects: [],
-      },
-    };
-  }
-};
 
 /**
  * Extract sections from text based on OpenResume algorithm
@@ -453,5 +379,92 @@ const extractProjects = (content) => {
   return projects;
 };
 
-// Also export the original function name for backward compatibility
-export const parseResume = parseResumeText;
+// Main parsing function
+const parseResume = async (pdfBuffer, fileName = "") => {
+  try {
+    console.log("Starting enhanced resume parsing");
+
+    // Extract text from PDF
+    const text = await extractPDFText(pdfBuffer);
+    console.log("Successfully extracted text from PDF, length:", text.length);
+
+    // Extract metadata from filename if available
+    const metadata = {
+      fileName: fileName || "Unnamed Resume",
+      uploadDate: new Date(),
+      fileType: fileName ? fileName.split(".").pop().toLowerCase() : "unknown",
+    };    // Extract metadata from filename if available
+    const metadata = {
+      fileName: fileName || "Unnamed Resume",
+      uploadDate: new Date(),
+      fileType: fileName ? fileName.split(".").pop().toLowerCase() : "unknown",
+    };
+
+    // Extract sections
+    const sections = extractSections(text);
+    console.log("Found sections:", Object.keys(sections));
+
+    // Parse data
+    const parsedData = {
+      skills: [],
+      experience: [],
+      projects: [],
+    };
+
+    // Extract skills
+    const skillsSection = Object.keys(sections).find(
+      (key) =>
+        key.toUpperCase().includes("SKILL") ||
+        key.toUpperCase().includes("TECHNICAL")
+    );
+    if (skillsSection) {
+      parsedData.skills = extractSkills(sections[skillsSection]);
+    } else {
+      // Try to extract skills from the entire text if no specific section found
+      parsedData.skills = extractSkills(text);
+    }
+
+    // Extract experience
+    const experienceSection = Object.keys(sections).find(
+      (key) =>
+        key.toUpperCase().includes("EXPERIENCE") ||
+        key.toUpperCase().includes("EMPLOYMENT")
+    );
+    if (experienceSection) {
+      parsedData.experience = extractExperience(sections[experienceSection]);
+    }
+
+    // Extract projects
+    const projectsSection = Object.keys(sections).find((key) =>
+      key.toUpperCase().includes("PROJECT")
+    );
+    if (projectsSection) {
+      parsedData.projects = extractProjects(sections[projectsSection]);
+    }
+
+    console.log("Extraction results:");
+    console.log("Skills:", parsedData.skills.length);
+    console.log("Experience entries:", parsedData.experience.length);
+    console.log("Projects:", parsedData.projects.length);
+
+    return {
+      ...metadata,
+      parsedData,
+    };
+  } catch (error) {
+    console.error("Resume parsing error:", error);
+    // Return minimal data structure instead of throwing
+    return {
+      fileName: fileName || "Unnamed Resume",
+      uploadDate: new Date(),
+      fileType: fileName ? fileName.split(".").pop().toLowerCase() : "unknown",
+      parsedData: {
+        skills: [],
+        experience: [],
+        projects: [],
+      }
+    };
+  }
+};
+
+export { parseResume };

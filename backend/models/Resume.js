@@ -1,74 +1,67 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
-const resumeSchema = new mongoose.Schema({
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+const resumeSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    title: {
+      type: String,
+      required: [true, "Resume title is required"],
+      trim: true,
+    },
+    fileUrl: {
+      type: String,
+      required: [true, "File URL is required"],
+    },
+    fileType: {
+      type: String,
+      enum: ["pdf", "docx"],
+      required: [true, "File type is required"],
+    },
+    parsedData: {
+      name: { type: String, required: false },
+      email: { type: String, required: false },
+      phone: { type: String, required: false },
+      skills: [String],
+      experience: [
+        {
+          title: { type: String, required: false },
+          company: { type: String, required: false },
+          location: { type: String, required: false },
+          startDate: { type: String, required: false }, // Changed from Date to String
+          endDate: { type: String, required: false }, // Changed from Date to String
+          description: { type: String, required: false },
+        },
+      ],
+      education: [
+        {
+          institution: { type: String, required: false },
+          degree: { type: String, required: false },
+          field: { type: String, required: false },
+          startDate: { type: String, required: false }, // Changed from Date to String
+          endDate: { type: String, required: false }, // Changed from Date to String
+        },
+      ],
+      projects: [
+        {
+          name: { type: String, required: false },
+          description: { type: String, required: false },
+          technologies: [String],
+          url: { type: String, required: false },
+        },
+      ],
+    },
+    isDefault: {
+      type: Boolean,
+      default: false,
+    },
   },
-  title: {
-    type: String,
-    required: [true, 'Resume title is required'],
-    trim: true
-  },
-  fileUrl: {
-    type: String,
-    required: [true, 'File URL is required']
-  },
-  fileType: {
-    type: String,
-    enum: ['pdf', 'docx'],
-    required: [true, 'File type is required']
-  },
-  parsedData: {
-    name: String,
-    email: String,
-    phone: String,
-    skills: [String],
-    experience: [
-      {
-        title: String,
-        company: String,
-        location: String,
-        startDate: Date,
-        endDate: Date,
-        description: String
-      }
-    ],
-    education: [
-      {
-        institution: String,
-        degree: String,
-        field: String,
-        startDate: Date,
-        endDate: Date
-      }
-    ],
-    projects: [
-      {
-        name: String,
-        description: String,
-        technologies: [String],
-        url: String
-      }
-    ]
-  },
-  isDefault: {
-    type: Boolean,
-    default: false
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
+  {
+    timestamps: true,
   }
-}, {
-  timestamps: true
-});
+);
 
-const Resume = mongoose.model('Resume', resumeSchema);
-
-export default Resume;
+export default mongoose.model("Resume", resumeSchema);

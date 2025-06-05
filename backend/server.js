@@ -8,6 +8,13 @@ import { dirname, join } from "path";
 // Load environment variables
 dotenv.config();
 
+// Temporary debug code - remove after confirming
+console.log("Cloudinary Config:", {
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY ? "Set" : "Not set",
+  api_secret: process.env.CLOUDINARY_API_SECRET ? "Set" : "Not set",
+});
+
 // Import routes
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";

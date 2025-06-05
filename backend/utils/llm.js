@@ -404,3 +404,108 @@ export const generateOverallEvaluation = async (application, job) => {
     confidence: (screeningEval.confidence + resumeEval.confidence) / 2,
   };
 };
+
+export const analyzeCandidateMatch = async (job, resume) => {
+  try {
+    // Calculate match score based on various factors
+    const skillsScore = calculateSkillsMatch(job.requiredSkills, resume.skills);
+    const experienceScore = calculateExperienceMatch(
+      job.experience,
+      resume.experience
+    );
+
+    // Convert to 0-100 scale
+    const score = Math.round((skillsScore * 0.7 + experienceScore * 0.3) * 100);
+
+    return {
+      score,
+      confidence: 0.85, // Hardcoded for now since we're using deterministic matching
+      reasons: generateMatchReasons(job, resume, {
+        skillsScore,
+        experienceScore,
+      }),
+    };
+  } catch (error) {
+    console.error("Error in LLM analysis:", error);
+    return {
+      score: 0,
+      confidence: 0,
+      reasons: ["Error analyzing match"],
+    };
+  }
+};
+
+const calculateSkillsMatch = (requiredSkills, candidateSkills) => {
+  if (!requiredSkills || !candidateSkills) return 0;
+  if (!requiredSkills.length) return 1;
+
+  const normalizedRequired = requiredSkills.map((s) => s.toLowerCase());
+  const normalizedCandidate = candidateSkills.map((s) => s.toLowerCase());
+
+  const matchedSkills = normalizedRequired.filter((skill) =>
+    normalizedCandidate.some((candSkill) => candSkill.includes(skill))
+  );
+
+  return matchedSkills.length / requiredSkills.length;
+};
+
+const calculateExperienceMatch = (requiredExperience, candidateExperience) => {
+  if (!requiredExperience || !candidateExperience) return 0;
+
+  const experienceLevels = {
+    Entry: 0,
+    Junior: 1,
+    "Mid-Level": 2,
+    Senior: 3,
+    Executive: 4,
+  };
+
+  // Calculate years of experience from candidate's experience entries
+  const totalYears = candidateExperience.reduce((total, exp) => {
+    const startYear = new Date(exp.period.start).getFullYear();
+    const endYear =
+      exp.period.end === "Present"
+        ? new Date().getFullYear()
+        : new Date(exp.period.end).getFullYear();
+    return total + (endYear - startYear);
+  }, 0);
+
+  const candidateLevel =
+    totalYears <= 2
+      ? "Entry"
+      : totalYears <= 4
+      ? "Junior"
+      : totalYears <= 7
+      ? "Mid-Level"
+      : totalYears <= 10
+      ? "Senior"
+      : "Executive";
+
+  const requiredLevel = experienceLevels[requiredExperience] || 0;
+  const candidateLevelValue = experienceLevels[candidateLevel] || 0;
+
+  return candidateLevelValue >= requiredLevel
+    ? 1
+    : 1 -
+        (requiredLevel - candidateLevelValue) /
+          Object.keys(experienceLevels).length;
+};
+
+const generateMatchReasons = (job, resume, scores) => {
+  const reasons = [];
+
+  // Skills match analysis
+  const skillMatchPercentage = Math.round(scores.skillsScore * 100);
+  reasons.push(`Candidate matches ${skillMatchPercentage}% of required skills`);
+
+  // Experience match analysis
+  if (scores.experienceScore > 0.8) {
+    reasons.push("Experience level exceeds job requirements");
+  } else if (scores.experienceScore > 0.5) {
+    reasons.push("Experience level meets job requirements");
+  } else {
+    reasons.push("Experience level is below job requirements");
+  }
+
+  return reasons;
+};

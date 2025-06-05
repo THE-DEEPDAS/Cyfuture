@@ -2,10 +2,11 @@ import axios from "axios";
 
 // Create a custom axios instance
 const api = axios.create({
-  baseURL: "", // Removed /api since Vite proxy automatically routes /api to the backend
+  baseURL: "/api", // Vite proxy will route /api requests to backend
   headers: {
     "Content-Type": "application/json",
   },
+  timeout: 30000, // 30 second timeout
 });
 
 // Add a request interceptor to include authentication token

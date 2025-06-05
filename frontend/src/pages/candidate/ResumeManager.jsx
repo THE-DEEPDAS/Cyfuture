@@ -12,6 +12,7 @@ import {
   faFileWord,
   faTrash,
   faStar,
+  faEye,
 } from "@fortawesome/free-solid-svg-icons";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../../utils/api";
@@ -46,29 +47,48 @@ const ResumeManager = () => {
       setError("");
       setUploadProgress(0);
 
-      // First upload to Cloudinary
-      const cloudinaryUrl = await uploadToCloudinary(file);
-      setUploadProgress(100);
-
-      // Then send to our backend
+      // Create FormData with file and metadata
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("resume", file);
       formData.append("title", file.name.split(".")[0]);
-      formData.append("cloudinaryUrl", cloudinaryUrl);
 
-      const response = await api.post("/api/resumes", formData, {
+      // Upload to backend
+      const response = await api.post("/resumes", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          setUploadProgress(percentCompleted);
+        },
+        timeout: 60000, // 60 second timeout for large files
       });
 
-      // Update resumes list and show parsed data
-      setResumes((prev) => [...prev, response.data]);
-      setParsedData(response.data.parsedData);
+      console.log("Resume upload response:", response.data);
 
-      // Show success message
-      setError("Resume uploaded successfully!");
-      setTimeout(() => setError(""), 3000);
+      // Check if we have a valid response
+      if (response.data && response.data.resume) {
+        // Extract newly created resume and parsed data
+        const { resume: newResume, parsedData: newParsed } = response.data;
+
+        try {
+          // Fetch matching jobs
+          await api.get(`/jobs/matching/${newResume._id}`);
+        } catch (matchError) {
+          console.error("Error fetching matching jobs:", matchError);
+        }
+
+        // Update UI states
+        setParsedData(newParsed || newResume.parsedData);
+        setUploadProgress(100);
+        setResumes((prev) => [...prev, newResume]);
+
+        setError("Resume uploaded successfully!");
+      } else {
+        throw new Error("Invalid response format from server");
+      }
     } catch (err) {
       console.error("Upload error:", err);
       setError(err.response?.data?.message || "Error uploading resume");
@@ -95,7 +115,7 @@ const ResumeManager = () => {
     const fetchResumes = async () => {
       try {
         setLoading(true);
-        const response = await api.get("/api/resumes");
+        const response = await api.get("/resumes");
         setResumes(response.data);
       } catch (error) {
         console.error("Error fetching resumes:", error);
@@ -111,7 +131,7 @@ const ResumeManager = () => {
   // Set default resume
   const handleSetDefault = async (resumeId) => {
     try {
-      await api.patch(`/api/resumes/${resumeId}/default`);
+      await api.patch(`/resumes/${resumeId}/default`);
       setResumes((prev) =>
         prev.map((resume) => ({
           ...resume,
@@ -129,7 +149,7 @@ const ResumeManager = () => {
     if (!window.confirm("Are you sure you want to delete this resume?")) return;
 
     try {
-      await api.delete(`/api/resumes/${resumeId}`);
+      await api.delete(`/resumes/${resumeId}`);
       setResumes((prev) => prev.filter((resume) => resume._id !== resumeId));
     } catch (error) {
       console.error("Error deleting resume:", error);
@@ -144,6 +164,15 @@ const ResumeManager = () => {
       month: "short",
       day: "numeric",
     });
+  };
+
+  // Handle viewing a resume
+  const handleViewResume = (resume) => {
+    if (resume.fileUrl) {
+      window.open(resume.fileUrl, "_blank");
+    } else {
+      setError("Resume file URL not found");
+    }
   };
 
   // Get icon for file type
@@ -259,6 +288,13 @@ const ResumeManager = () => {
                   </p>
                   <div className="mt-4 flex space-x-4">
                     <button
+                      onClick={() => handleViewResume(resume)}
+                      className="text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      <FontAwesomeIcon icon={faEye} className="mr-1" />
+                      View
+                    </button>
+                    <button
                       onClick={() => handleSetDefault(resume._id)}
                       disabled={resume.isDefault}
                       className={`text-sm ${
@@ -267,12 +303,14 @@ const ResumeManager = () => {
                           : "text-blue-600 hover:text-blue-700"
                       }`}
                     >
+                      <FontAwesomeIcon icon={faStar} className="mr-1" />
                       Set as Default
                     </button>
                     <button
                       onClick={() => handleDelete(resume._id)}
                       className="text-sm text-red-600 hover:text-red-700"
                     >
+                      <FontAwesomeIcon icon={faTrash} className="mr-1" />
                       Delete
                     </button>
                   </div>

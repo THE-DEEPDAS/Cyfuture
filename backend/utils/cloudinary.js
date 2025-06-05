@@ -1,7 +1,11 @@
 import { v2 as cloudinary } from "cloudinary";
+import dotenv from "dotenv";
 import streamifier from "streamifier";
 
-// Configure Cloudinary
+// Ensure environment variables are loaded
+dotenv.config();
+
+// Configure Cloudinary with environment variables
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -53,42 +57,4 @@ export const deleteFile = async (publicId) => {
   }
 };
 
-/**
- * Get optimized URL with transformations
- * @param {String} url - Original Cloudinary URL
- * @param {Object} options - Transformation options
- * @returns {String} - Transformed URL
- */
-export const getOptimizedUrl = (url, options = {}) => {
-  // Extract public ID from the URL
-  const parts = url.split("/");
-  const uploadIndex = parts.findIndex((part) => part === "upload");
-
-  if (uploadIndex === -1) return url;
-
-  const publicIdWithExt = parts.slice(uploadIndex + 1).join("/");
-  const publicId = publicIdWithExt.substring(
-    0,
-    publicIdWithExt.lastIndexOf(".")
-  );
-
-  // Default transformation options
-  const defaultOptions = {
-    quality: "auto",
-    fetch_format: "auto",
-    ...options,
-  };
-
-  // Build transformation string
-  const transformations = Object.entries(defaultOptions)
-    .map(([key, value]) => `${key}_${value}`)
-    .join(",");
-
-  return cloudinary.url(publicId, { transformation: transformations });
-};
-
-export default {
-  uploadFile,
-  deleteFile,
-  getOptimizedUrl,
-};
+export { cloudinary };

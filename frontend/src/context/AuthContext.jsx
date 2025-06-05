@@ -40,7 +40,7 @@ const AuthProvider = ({ children }) => {
 
           // Get user data
           console.log("Fetching user data...");
-          const { data } = await api.get(`/api/users/me`);
+          const { data } = await api.get(`/users/me`);
           console.log("User data fetched:", data);
           setUser(data);
         } catch (error) {
@@ -60,7 +60,7 @@ const AuthProvider = ({ children }) => {
   // Login function
   const login = async (credentials) => {
     try {
-      const { data } = await api.post(`/api/auth/login`, credentials);
+      const { data } = await api.post(`/auth/login`, credentials);
       console.log("Login successful, user data:", data);
 
       localStorage.setItem("token", data.token);
@@ -94,7 +94,7 @@ const AuthProvider = ({ children }) => {
   // Register function
   const register = async (userData) => {
     try {
-      const { data } = await api.post(`/api/auth/register`, userData);
+      const { data } = await api.post(`/auth/register`, userData);
 
       localStorage.setItem("token", data.token);
       axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;

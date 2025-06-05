@@ -10,6 +10,7 @@ import {
   applyForJob,
   matchCandidates,
   getJobApplications,
+  getMatchingJobs,
 } from "../controllers/jobController.js";
 
 const router = express.Router();
@@ -19,6 +20,9 @@ router.route("/").post(protect, company, createJob).get(getJobs);
 
 // Company routes
 router.route("/company/me").get(protect, company, getCompanyJobs);
+
+// Matching routes
+router.route("/matching/:resumeId").get(protect, getMatchingJobs);
 
 // Job specific routes
 router

@@ -416,3 +416,40 @@ export const getJobApplications = asyncHandler(async (req, res) => {
 
   res.json(applications);
 });
+
+/**
+ * @desc    Get jobs that match a resume
+ * @route   GET /api/jobs/matching/:resumeId
+ * @access  Private
+ */
+export const getMatchingJobs = asyncHandler(async (req, res) => {
+  try {
+    const { resumeId } = req.params;
+
+    // Verify the resume belongs to the current user
+    const resume = await Resume.findOne({
+      _id: resumeId,
+      user: req.user._id,
+    });
+
+    if (!resume) {
+      return res.status(404).json({ message: "Resume not found" });
+    }
+
+    // Get active jobs
+    const jobs = await Job.find({ status: "active" });
+
+    // Use job matching utility to find matching jobs
+    const matchingJobs = await getShortlistedCandidates(
+      jobs,
+      resume,
+      70, // Threshold
+      10 // Limit
+    );
+
+    res.json(matchingJobs);
+  } catch (error) {
+    console.error("Error finding matching jobs:", error);
+    res.status(500).json({ message: "Error finding matching jobs" });
+  }
+});
