@@ -80,8 +80,33 @@ const ResumeManager = () => {
           console.error("Error fetching matching jobs:", matchError);
         }
 
+        // Sanitize the parsed data to ensure no undefined values
+        const sanitizedParsedData = {
+          skills: Array.isArray(newParsed?.skills) ? newParsed.skills : [],
+          experience: Array.isArray(newParsed?.experience)
+            ? newParsed.experience.map((exp) => ({
+                title: exp?.title || "",
+                company: exp?.company || "",
+                duration: exp?.duration || "",
+                description: exp?.description || "",
+                responsibilities: Array.isArray(exp?.responsibilities)
+                  ? exp.responsibilities
+                  : [exp?.description].filter(Boolean),
+              }))
+            : [],
+          projects: Array.isArray(newParsed?.projects)
+            ? newParsed.projects.map((proj) => ({
+                name: proj?.name || "",
+                description: proj?.description || "",
+                technologies: Array.isArray(proj?.technologies)
+                  ? proj.technologies
+                  : [],
+              }))
+            : [],
+        };
+
         // Update UI states
-        setParsedData(newParsed || newResume.parsedData);
+        setParsedData(sanitizedParsedData);
         setUploadProgress(100);
         setResumes((prev) => [...prev, newResume]);
 
@@ -323,66 +348,119 @@ const ResumeManager = () => {
 
       {/* Parsed Data Preview */}
       {parsedData && (
-        <div className="mt-8 bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+        <div className="mt-8 bg-gray-50 rounded-lg p-6 border border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">
             Parsed Resume Data
           </h2>
           <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-medium text-gray-900">Skills</h3>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {parsedData.skills.map((skill, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"
-                  >
-                    {skill}
-                  </span>
-                ))}
+            {/* Skills Section */}
+            {parsedData.skills && parsedData.skills.length > 0 && (
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Skills
+                </h3>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {parsedData.skills.map((skill, index) => (
+                    <span
+                      key={index}
+                      className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div>
-              <h3 className="text-lg font-medium text-gray-900">Experience</h3>
-              <div className="mt-2 space-y-4">
-                {parsedData.experience.map((exp, index) => (
-                  <div key={index} className="border-l-2 border-gray-200 pl-4">
-                    <h4 className="font-medium text-gray-900">{exp.title}</h4>
-                    <p className="text-sm text-gray-600">{exp.company}</p>
-                    <p className="text-sm text-gray-500">{exp.duration}</p>
-                    <ul className="mt-2 list-disc list-inside text-sm text-gray-600">
-                      {exp.responsibilities.map((resp, idx) => (
-                        <li key={idx}>{resp}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <h3 className="text-lg font-medium text-gray-900">Projects</h3>
-              <div className="mt-2 space-y-4">
-                {parsedData.projects.map((project, index) => (
-                  <div key={index} className="border-l-2 border-gray-200 pl-4">
-                    <h4 className="font-medium text-gray-900">
-                      {project.name}
-                    </h4>
-                    <p className="text-sm text-gray-600">
-                      {project.description}
-                    </p>
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      {project.technologies.map((tech, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
-                        >
-                          {tech}
-                        </span>
-                      ))}
+            )}
+
+            {/* Experience Section */}
+            {parsedData.experience && parsedData.experience.length > 0 && (
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Experience
+                </h3>
+                <div className="mt-2 space-y-4">
+                  {parsedData.experience.map((exp, index) => (
+                    <div
+                      key={index}
+                      className="border-l-2 border-blue-300 pl-4 py-2 bg-gray-50 rounded-r-md"
+                    >
+                      <h4 className="font-medium text-gray-900">
+                        {exp.title || "Position"}
+                      </h4>
+                      {exp.company && (
+                        <p className="text-sm text-gray-700 font-medium">
+                          {exp.company}
+                        </p>
+                      )}
+                      {exp.duration && (
+                        <p className="text-sm text-gray-600">{exp.duration}</p>
+                      )}
+                      {exp.description && !exp.responsibilities?.length && (
+                        <p className="mt-2 text-sm text-gray-700">
+                          {exp.description}
+                        </p>
+                      )}
+                      {exp.responsibilities &&
+                      exp.responsibilities.length > 0 ? (
+                        <ul className="mt-2 list-disc list-inside text-sm text-gray-700 space-y-1">
+                          {exp.responsibilities.map((resp, idx) => (
+                            <li key={idx}>{resp}</li>
+                          ))}
+                        </ul>
+                      ) : null}
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Projects Section */}
+            {parsedData.projects && parsedData.projects.length > 0 && (
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Projects
+                </h3>
+                <div className="mt-2 space-y-4">
+                  {parsedData.projects.map((project, index) => (
+                    <div
+                      key={index}
+                      className="border-l-2 border-green-300 pl-4 py-2 bg-gray-50 rounded-r-md"
+                    >
+                      <h4 className="font-medium text-gray-900">
+                        {project.name || "Project"}
+                      </h4>
+                      {project.description && (
+                        <p className="text-sm text-gray-700 mt-1">
+                          {project.description}
+                        </p>
+                      )}
+                      {project.technologies &&
+                        project.technologies.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {project.technologies.map((tech, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200"
+                              >
+                                {tech}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* If no data was found */}
+            {(!parsedData.skills || parsedData.skills.length === 0) &&
+              (!parsedData.experience || parsedData.experience.length === 0) &&
+              (!parsedData.projects || parsedData.projects.length === 0) && (
+                <div className="text-center py-4 text-gray-500">
+                  No detailed information could be extracted from this resume.
+                </div>
+              )}
           </div>
         </div>
       )}

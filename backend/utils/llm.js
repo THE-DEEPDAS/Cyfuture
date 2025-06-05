@@ -1,8 +1,29 @@
+import dotenv from "dotenv";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Initialize Gemini API
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+// Load environment variables
+dotenv.config();
+
+// Initialize Gemini API with the API key
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+/**
+ * Send a prompt to the LLM and get a response
+ * @param {string} prompt - The prompt to send to the LLM
+ * @returns {Promise<string>} - The text response from the LLM
+ */
+export const getLLMResponse = async (prompt) => {
+  try {
+    console.log("Making request to Gemini API...");
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text();
+  } catch (error) {
+    console.error("LLM Response Error:", error);
+    throw new Error(`Failed to get LLM response: ${error.message}`);
+  }
+};
 
 // Language-specific analysis templates
 const analysisTemplates = {
@@ -63,9 +84,8 @@ export const analyzeCandidate = async (application, job, language = "en") => {
       If possible, suggest potential interview questions based on any gaps or areas that need clarification.
     `;
 
-    // Get LLM response
-    const result = await model.generateContent(prompt);
-    const response = await result.response.text();
+    // Get LLM response using the working method
+    const response = await getLLMResponse(prompt);
 
     // Parse the structured response
     const analysis = parseStructuredResponse(response, template);
@@ -172,14 +192,10 @@ export const generateChatResponse = async (
       Previous context: ${context}
       User message: ${message}
       
-      Please provide a helpful and professional response in ${getLanguageName(
-        language
-      )} language.
+      Please provide a helpful and professional response in ${language} language.
     `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    return await getLLMResponse(prompt);
   } catch (error) {
     console.error("Chat Response Error:", error);
     throw new Error("Failed to generate chat response");
@@ -195,16 +211,14 @@ export const generateChatResponse = async (
 export const translateText = async (text, targetLanguage) => {
   try {
     const prompt = `
-      Translate the following text to ${getLanguageName(targetLanguage)}:
+      Translate the following text to ${targetLanguage}:
       
       ${text}
       
       Provide only the translated text with no additional explanations.
     `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    return await getLLMResponse(prompt);
   } catch (error) {
     console.error("Translation Error:", error);
     throw new Error("Failed to translate text");
@@ -226,9 +240,7 @@ export const detectLanguage = async (text) => {
       Respond with only the two-letter language code and nothing else.
     `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text().trim().toLowerCase();
+    return (await getLLMResponse(prompt)).trim().toLowerCase();
   } catch (error) {
     console.error("Language Detection Error:", error);
     return "en"; // Default to English if detection fails
