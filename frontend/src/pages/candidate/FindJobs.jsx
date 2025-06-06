@@ -78,42 +78,49 @@ const FindJobs = () => {
     if (Array.isArray(jobs)) {
       filterJobs();
     }
-  }, [filters, jobs, searchTerm]);  const fetchJobs = async () => {
+  }, [filters, jobs, searchTerm]);
+  const fetchJobs = async () => {
     try {
       setLoading(true);
       const response = await api.get("/jobs");
-      
+
       // Determine the structure of the response and extract jobs array
       let jobsData;
       if (Array.isArray(response.data)) {
         jobsData = response.data;
       } else if (Array.isArray(response.data?.jobs)) {
         jobsData = response.data.jobs;
-      } else if (typeof response.data === 'object' && response.data !== null) {
-        jobsData = Object.values(response.data).filter(item => typeof item === 'object');
+      } else if (typeof response.data === "object" && response.data !== null) {
+        jobsData = Object.values(response.data).filter(
+          (item) => typeof item === "object"
+        );
       } else {
         jobsData = [];
       }
-      
+
       // Log the raw response and processed jobs for debugging
       console.log("Jobs API response:", response.data);
       console.log("Processed jobs data:", jobsData);
-      
+
       // Validate and normalize job data
-      const normalizedJobs = jobsData.map(job => {
-        if (!job) return null;
-        
-        // Ensure all jobs have required fields with fallbacks
-        return {
-          ...job,
-          title: job.title || "Untitled Position",
-          company: job.company || { companyName: "Unknown Company" },
-          description: job.description || "No description available",
-          location: job.location || "Location not specified",
-          requiredSkills: Array.isArray(job.requiredSkills) ? job.requiredSkills : []
-        };
-      }).filter(Boolean); // Remove any null entries
-      
+      const normalizedJobs = jobsData
+        .map((job) => {
+          if (!job) return null;
+
+          // Ensure all jobs have required fields with fallbacks
+          return {
+            ...job,
+            title: job.title || "Untitled Position",
+            company: job.company || { companyName: "Unknown Company" },
+            description: job.description || "No description available",
+            location: job.location || "Location not specified",
+            requiredSkills: Array.isArray(job.requiredSkills)
+              ? job.requiredSkills
+              : [],
+          };
+        })
+        .filter(Boolean); // Remove any null entries
+
       console.log("Normalized jobs:", normalizedJobs);
       setJobs(normalizedJobs);
       setFilteredJobs(normalizedJobs);
@@ -178,7 +185,8 @@ const FindJobs = () => {
       ...prev,
       skills: prev.skills.filter((s) => s !== skill),
     }));
-  };  const filterJobs = () => {
+  };
+  const filterJobs = () => {
     // Return early if jobs is not an array or is empty
     if (!Array.isArray(jobs)) {
       setFilteredJobs([]);
@@ -186,12 +194,10 @@ const FindJobs = () => {
     }
 
     // Validate job objects to ensure they have required properties
-    let validJobs = jobs.filter(job => 
-      job && 
-      typeof job === 'object' && 
-      job._id // Ensure job has an ID
+    let validJobs = jobs.filter(
+      (job) => job && typeof job === "object" && job._id // Ensure job has an ID
     );
-    
+
     let result = [...validJobs];
 
     // Apply search term filter
@@ -199,48 +205,56 @@ const FindJobs = () => {
       result = result.filter(
         (job) =>
           (job.title || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (job.company?.companyName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (job.description || "").toLowerCase().includes(searchTerm.toLowerCase())
+          (job.company?.companyName || "")
+            .toLowerCase()
+            .includes(searchTerm.toLowerCase()) ||
+          (job.description || "")
+            .toLowerCase()
+            .includes(searchTerm.toLowerCase())
       );
-    }    // First separate jobs into matching and non-matching based on skills
+    } // First separate jobs into matching and non-matching based on skills
     // Use both user profile skills and filter skills
     const userSkills = new Set([
       ...(userInfo?.skills || []),
       ...filters.skills,
     ]);
-    
+
     // Skip skill matching if the user has no skills
     let matchingJobs = [];
     let nonMatchingJobs = [];
-    
+
     if (userSkills.size > 0) {
       [matchingJobs, nonMatchingJobs] = result.reduce(
         ([matching, nonMatching], job) => {
           // Skip jobs that don't have requiredSkills
-          if (!job || !Array.isArray(job.requiredSkills) || job.requiredSkills.length === 0) {
+          if (
+            !job ||
+            !Array.isArray(job.requiredSkills) ||
+            job.requiredSkills.length === 0
+          ) {
             nonMatching.push(job);
             return [matching, nonMatching];
           }
 
           // Filter out any null or undefined skill entries
-          const validJobSkills = job.requiredSkills.filter(skill => skill);
+          const validJobSkills = job.requiredSkills.filter((skill) => skill);
           if (validJobSkills.length === 0) {
             nonMatching.push(job);
             return [matching, nonMatching];
           }
-          
+
           const jobSkills = new Set(validJobSkills);
-          
+
           // Check if any of the job's required skills match the user's skills
           try {
             const hasMatchingSkills = Array.from(jobSkills).some((skill) =>
-              Array.from(userSkills).some(
-                (userSkill) => {
-                  if (!skill || !userSkill) return false;
-                  return userSkill.toLowerCase().includes(skill.toLowerCase()) ||
-                    skill.toLowerCase().includes(userSkill.toLowerCase());
-                }
-              )
+              Array.from(userSkills).some((userSkill) => {
+                if (!skill || !userSkill) return false;
+                return (
+                  userSkill.toLowerCase().includes(skill.toLowerCase()) ||
+                  skill.toLowerCase().includes(userSkill.toLowerCase())
+                );
+              })
             );
 
             if (hasMatchingSkills) {
@@ -251,57 +265,79 @@ const FindJobs = () => {
           } catch (error) {
             console.error("Error in skill matching:", error);
             nonMatching.push(job);
-          }        return [matching, nonMatching];
-      },
-      [[], []]
-    );
+          }
+          return [matching, nonMatching];
+        },
+        [[], []]
+      );
     } else {
       // If no user skills, treat all jobs as non-matching
       nonMatchingJobs = result;
-    }    // Apply filters with null checks, ensure we only filter when both filter and job data are valid
+    } // Apply filters with null checks, ensure we only filter when both filter and job data are valid
     if (filters.location) {
-      result = result.filter((job) =>
-        job.location && job.location.toLowerCase().includes(filters.location.toLowerCase())
+      result = result.filter(
+        (job) =>
+          job.location &&
+          job.location.toLowerCase().includes(filters.location.toLowerCase())
       );
     }
-    
+
     if (filters.jobType) {
-      result = result.filter((job) => job.jobType && job.jobType === filters.jobType);
+      result = result.filter(
+        (job) => job.jobType && job.jobType === filters.jobType
+      );
     }
-    
+
     if (filters.experienceLevel) {
       result = result.filter(
-        (job) => job.experience && job.experience.level === filters.experienceLevel
+        (job) =>
+          job.experience && job.experience.level === filters.experienceLevel
       );
     }
-    
+
     if (filters.salaryMin) {
       result = result.filter(
-        (job) => job.salary && job.salary.min && job.salary.min >= parseInt(filters.salaryMin)
+        (job) =>
+          job.salary &&
+          job.salary.min &&
+          job.salary.min >= parseInt(filters.salaryMin)
       );
     }
-    
+
     if (filters.salaryMax) {
       result = result.filter(
-        (job) => job.salary && job.salary.max && job.salary.max <= parseInt(filters.salaryMax)
+        (job) =>
+          job.salary &&
+          job.salary.max &&
+          job.salary.max <= parseInt(filters.salaryMax)
       );
     }
-    
+
     if (filters.industry) {
-      result = result.filter((job) => job.industry && job.industry === filters.industry);
+      result = result.filter(
+        (job) => job.industry && job.industry === filters.industry
+      );
     }
-    
+
     if (filters.remote !== "all") {
-      result = result.filter((job) => job.workType && job.workType === filters.remote);
+      result = result.filter(
+        (job) => job.workType && job.workType === filters.remote
+      );
     }
-    
+
     if (filters.skills.length > 0) {
-      result = result.filter((job) =>
-        Array.isArray(job.requiredSkills) && filters.skills.every((skill) =>
-          skill && job.requiredSkills.some((jobSkill) =>
-            jobSkill && jobSkill.toLowerCase().includes(skill.toLowerCase())
+      result = result.filter(
+        (job) =>
+          Array.isArray(job.requiredSkills) &&
+          filters.skills.every(
+            (skill) =>
+              skill &&
+              job.requiredSkills.some(
+                (jobSkill) =>
+                  jobSkill &&
+                  jobSkill.toLowerCase().includes(skill.toLowerCase())
+              )
           )
-        )
       );
     }
 
@@ -373,9 +409,7 @@ const FindJobs = () => {
     // If we're calculating matches, show a loading indicator
     if (calculatingMatch) {
       return (
-        <div className="text-sm text-gray-500 italic">
-          Calculating match...
-        </div>
+        <div className="text-sm text-gray-500 italic">Calculating match...</div>
       );
     }
 
@@ -384,11 +418,7 @@ const FindJobs = () => {
 
     // Return a default score if calculation fails
     if (!score && score !== 0) {
-      return (
-        <div className="text-sm text-gray-500">
-          No match data
-        </div>
-      );
+      return <div className="text-sm text-gray-500">No match data</div>;
     }
 
     let colorClass = "text-red-500";
@@ -401,11 +431,11 @@ const FindJobs = () => {
         {score}% Match
       </div>
     );
-  };// Format salary range with currency
+  }; // Format salary range with currency
   const formatSalary = (salaryObj) => {
     if (!salaryObj || !salaryObj.min || !salaryObj.max || !salaryObj.currency)
       return "Salary not specified";
-    
+
     try {
       const formatter = new Intl.NumberFormat("en-US", {
         style: "currency",
@@ -418,7 +448,9 @@ const FindJobs = () => {
       )}`;
     } catch (error) {
       console.error("Error formatting salary:", error);
-      return `${salaryObj.min} - ${salaryObj.max} ${salaryObj.currency || "INR"}`;
+      return `${salaryObj.min} - ${salaryObj.max} ${
+        salaryObj.currency || "INR"
+      }`;
     }
   };
 
@@ -666,7 +698,8 @@ const FindJobs = () => {
                 size="2x"
                 className="text-blue-500"
               />
-            </div>          ) : filteredJobs.length === 0 ? (
+            </div>
+          ) : filteredJobs.length === 0 ? (
             <div className="bg-white rounded-lg p-8 text-center text-gray-700">
               <FontAwesomeIcon
                 icon="search"
@@ -681,57 +714,70 @@ const FindJobs = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-6">
-              {filteredJobs.map((job) => (job && job._id) ? (<div
-                  key={job._id}
-                  className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-6"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-900">
-                        {job.title || "Untitled Position"}
-                      </h3>
-                      <p className="text-gray-600">
-                        {job.company?.companyName || "Unknown Company"}
+              {filteredJobs.map((job) =>
+                job && job._id ? (
+                  <div
+                    key={job._id}
+                    className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-6"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="text-xl font-semibold text-gray-900">
+                          {job.title || "Untitled Position"}
+                        </h3>
+                        <p className="text-gray-600">
+                          {job.company?.companyName || "Unknown Company"}
+                        </p>
+                      </div>
+                      {renderMatchScore(job)}
+                    </div>
+                    <div className="mt-2">
+                      <p className="text-gray-700">
+                        {job.description || "No description available."}
                       </p>
-                    </div>
-                    {renderMatchScore(job)}
-                  </div>
-
-                  <div className="mt-2">
-                    <p className="text-gray-700">{job.description || "No description available."}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {job.requiredSkills && job.requiredSkills.length > 0 ? (
-                        job.requiredSkills.map((skill, index) => (
-                          <span
-                            key={index}
-                            className="bg-gray-100 text-gray-800 px-2 py-1 rounded-md text-sm"
-                          >
-                            {skill}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {job.requiredSkills && job.requiredSkills.length > 0 ? (
+                          job.requiredSkills.map((skill, index) => (
+                            <span
+                              key={index}
+                              className="bg-gray-100 text-gray-800 px-2 py-1 rounded-md text-sm"
+                            >
+                              {skill}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-gray-500 text-sm">
+                            No skills specified
                           </span>
-                        ))
-                      ) : (
-                        <span className="text-gray-500 text-sm">No skills specified</span>
-                      )}
+                        )}
+                      </div>
+                    </div>{" "}
+                    <div className="mt-4 flex justify-between items-center">
+                      <div className="text-sm text-gray-600">
+                        <span>{job.location || "Remote/Flexible"}</span>
+                        {job.salary &&
+                        job.salary.min &&
+                        job.salary.max &&
+                        job.salary.currency ? (
+                          <span className="ml-2 pl-2 border-l">
+                            {formatSalary(job.salary)}
+                          </span>
+                        ) : (
+                          <span className="ml-2 pl-2 border-l">
+                            Salary not specified
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleApply(job)}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                      >
+                        Apply Now
+                      </button>{" "}
                     </div>
-                  </div>                  <div className="mt-4 flex justify-between items-center">
-                    <div className="text-sm text-gray-600">
-                      <span>{job.location || "Remote/Flexible"}</span>
-                      {job.salary && job.salary.min && job.salary.max && job.salary.currency ? (
-                        <span className="ml-2 pl-2 border-l">
-                          {formatSalary(job.salary)}
-                        </span>
-                      ) : (
-                        <span className="ml-2 pl-2 border-l">Salary not specified</span>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => handleApply(job)}
-                      className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
-                    >
-                      Apply Now
-                    </button>                  </div>
-                </div>
-              ) : null)}
+                  </div>
+                ) : null
+              )}
             </div>
           )}
         </div>
