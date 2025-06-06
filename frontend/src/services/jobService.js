@@ -235,6 +235,15 @@ export const applyForJob = async (
   screeningResponses = []
 ) => {
   try {
+    // Validate required parameters
+    if (!jobId) {
+      throw new Error("Job ID is required");
+    }
+
+    if (!resumeId) {
+      throw new Error("Resume ID is required");
+    }
+
     // First check if already applied using retry wrapper
     const checkApplication = async () => {
       try {
@@ -242,22 +251,28 @@ export const applyForJob = async (
           "get",
           API_ENDPOINTS.applications.candidate
         );
-        return applications.some((app) => app.job._id === jobId);
+        return applications?.some((app) => app?.job?._id === jobId);
       } catch (error) {
         if (error.response?.status === 404) {
           return false; // No applications found
         }
-        throw error;
+        console.warn("Error checking applications:", error);
+        return false; // Continue with application if check fails
       }
     };
 
-    const alreadyApplied = await withRetry(checkApplication);
-
-    if (alreadyApplied) {
-      throw new Error("You have already applied for this job");
+    try {
+      const alreadyApplied = await withRetry(checkApplication);
+      if (alreadyApplied) {
+        throw new Error("You have already applied for this job");
+      }
+    } catch (checkError) {
+      console.warn("Error during application check:", checkError);
+      // Continue anyway to avoid blocking legitimate applications
     }
 
     // Submit application
+    console.log(`Applying to job ${jobId} with resume ${resumeId}`);
     const data = await callApi("post", API_ENDPOINTS.jobs.apply(jobId), {
       resumeId,
       coverLetter,
@@ -266,7 +281,8 @@ export const applyForJob = async (
 
     return data;
   } catch (error) {
-    return handleApiError(error);
+    console.error("Application error:", error);
+    throw error; // Let the caller handle the error
   }
 };
 

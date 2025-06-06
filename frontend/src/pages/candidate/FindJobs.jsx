@@ -7,12 +7,12 @@ import { toast } from "react-toastify";
 import api from "../../../src/utils/api";
 import {
   formatSalary,
-  applyForJob,
   calculateMatchScore,
   fetchJobsWithFilters,
   getMatchScoreStyle,
   formatDate,
 } from "../../services/jobService";
+import { applyWithScreening } from "../../services/applicationService";
 
 const FindJobs = () => {
   const [jobs, setJobs] = useState([]);
@@ -453,7 +453,6 @@ const FindJobs = () => {
       }`;
     }
   };
-
   const handleApply = async (job) => {
     try {
       if (!userInfo) {
@@ -462,66 +461,145 @@ const FindJobs = () => {
         return;
       }
 
+      // Ensure we have a valid job object with an ID
+      if (!job || !job._id) {
+        toast.error("Invalid job data. Please refresh the page and try again.");
+        return;
+      }
+
+      // Set the selected job and open the application modal
       setSelectedJob(job);
       setApplying(true);
 
-      // Show loading toast
-      const loadingToast = toast.loading("Submitting your application...");
+      // Don't submit automatically - wait for user to click the Submit button in the modal
+    } catch (error) {
+      console.error("Error preparing application:", error);
+      toast.error("Failed to prepare application form");
+    }
+  };
 
-      try {
-        // Get default resume
-        const resumeResponse = await api.get("/resumes/default");
-        if (!resumeResponse.data?._id) {
+  // New function to handle the actual submission
+  const handleSubmitApplication = async () => {
+    if (!selectedJob || !selectedJob._id) {
+      toast.error("Invalid job selection");
+      return;
+    }
+
+    // Show loading toast
+    const loadingToast = toast.loading("Submitting your application...");
+
+    try {
+      // Get default resume
+      const resumeResponse = await api.get("/resumes/default");
+      if (!resumeResponse.data?._id) {
+        toast.dismiss(loadingToast);
+        toast.error("Please create a resume before applying");
+        navigate("/candidate/resume");
+        return;
+      }
+
+      const resumeId = resumeResponse.data._id;
+      const jobId = selectedJob._id;
+
+      console.log(
+        `Submitting application for job ${jobId} with resume ${resumeId}`
+      );
+
+      // Get screening responses from the form
+      const screeningResponses =
+        selectedJob.screeningQuestions?.map((q, index) => {
+          const responseInput = document.getElementById(`screening-${index}`);
+          const response = responseInput ? responseInput.value : "";
+
+          // Return object structure matching backend expectations
+          return {
+            question: q._id,
+            response: response,
+          };
+        }) || [];
+
+      // Validate screening responses
+      if (selectedJob.screeningQuestions?.length > 0) {
+        const emptyResponses = screeningResponses.some(
+          (response) => !response.response.trim()
+        );
+        if (emptyResponses) {
           toast.dismiss(loadingToast);
-          toast.error("Please create a resume before applying");
-          navigate("/candidate/resume");
+          toast.error("Please answer all screening questions");
           return;
         }
-
-        const response = await applyForJob(job._id, resumeResponse.data._id);
-        toast.dismiss(loadingToast);
-        toast.success("Application submitted successfully!");
-
-        // Update job application count locally
-        setJobs((prevJobs) =>
-          prevJobs.map((j) =>
-            j._id === job._id
-              ? { ...j, applicationCount: (j.applicationCount || 0) + 1 }
-              : j
-          )
-        );
-
-        // Update filtered jobs as well
-        setFilteredJobs((prevFiltered) =>
-          prevFiltered.map((j) =>
-            j._id === job._id
-              ? { ...j, applicationCount: (j.applicationCount || 0) + 1 }
-              : j
-          )
-        );
-
-        // Close the application modal
-        setApplying(false);
-        setSelectedJob(null);
-      } catch (error) {
-        toast.dismiss(loadingToast);
-        console.error("Application error:", error);
-
-        if (
-          error.response?.status === 400 &&
-          error.response.data?.message?.includes("already applied")
-        ) {
-          toast.error("You have already applied for this job");
-        } else if (error.response?.status === 404) {
-          toast.error("Job posting no longer available");
-        } else {
-          toast.error(
-            error.response?.data?.message || "Failed to submit application"
-          );
-        }
       }
-    } finally {
+
+      // Get cover letter if provided
+      const coverLetterInput = document.getElementById("cover-letter");
+      const coverLetter = coverLetterInput ? coverLetterInput.value : "";
+      // Use the enhanced application service
+      const response = await applyWithScreening(
+        jobId,
+        resumeId,
+        coverLetter,
+        screeningResponses
+      );
+
+      toast.dismiss(loadingToast);
+      toast.success("Application submitted successfully!");
+
+      // Show confirmation with next steps
+      toast.info(
+        "Your application has been received. You can track its status in your applications dashboard."
+      );
+
+      // Update job application count locally
+      setJobs((prevJobs) =>
+        prevJobs.map((j) =>
+          j._id === selectedJob._id
+            ? { ...j, applicationCount: (j.applicationCount || 0) + 1 }
+            : j
+        )
+      );
+
+      // Update filtered jobs as well
+      setFilteredJobs((prevFiltered) =>
+        prevFiltered.map((j) =>
+          j._id === selectedJob._id
+            ? { ...j, applicationCount: (j.applicationCount || 0) + 1 }
+            : j
+        )
+      );
+
+      // Open the chat interface for interview questions
+      if (response && (response._id || response.id)) {
+        navigate(`/candidate/applications/${response._id || response.id}`);
+      } else {
+        console.warn("Response missing application ID:", response);
+        toast.info(
+          "Application submitted, but couldn't open interview chat. Please check your applications."
+        );
+        navigate("/candidate");
+      }
+
+      // Close the application modal
       setApplying(false);
+      setSelectedJob(null);
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      console.error("Application error:", error);
+
+      if (error.message?.includes("already applied")) {
+        toast.error("You have already applied for this job");
+      } else if (error.response?.status === 404) {
+        toast.error("Job posting no longer available");
+      } else if (error.message?.includes("experience?.reduce")) {
+        toast.error(
+          "Your resume is missing work experience details. Please complete your profile."
+        );
+      } else {
+        toast.error(
+          error.message ||
+            error.response?.data?.message ||
+            "Failed to submit application"
+        );
+      }
     }
   };
 
@@ -767,13 +845,13 @@ const FindJobs = () => {
                             Salary not specified
                           </span>
                         )}
-                      </div>
+                      </div>{" "}
                       <button
                         onClick={() => handleApply(job)}
                         className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
                       >
                         Apply Now
-                      </button>{" "}
+                      </button>
                     </div>
                   </div>
                 ) : null
@@ -781,26 +859,126 @@ const FindJobs = () => {
             </div>
           )}
         </div>
-      </div>
-
+      </div>{" "}
       {/* Application Modal */}
       {applying && selectedJob && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-auto">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full my-8">
             <h2 className="text-2xl font-bold mb-4">
               Apply for {selectedJob.title}
             </h2>
-            {/* Add application form here */}
-            <div className="mt-4 flex justify-end gap-2">
+
+            <div className="mb-6">
+              <p className="text-gray-700">
+                {selectedJob.description || "No description available."}
+              </p>
+
+              <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-gray-600">
+                <div>
+                  <span className="font-medium">Company:</span>{" "}
+                  {selectedJob.company?.companyName}
+                </div>
+                <div>
+                  <span className="font-medium">Location:</span>{" "}
+                  {selectedJob.location || "Remote"}
+                </div>
+                <div>
+                  <span className="font-medium">Experience:</span>{" "}
+                  {selectedJob.experience || "Not specified"}
+                </div>
+                <div>
+                  <span className="font-medium">Job Type:</span>{" "}
+                  {selectedJob.jobType || "Full-time"}
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-200 my-4 pt-4">
+              <h3 className="text-lg font-semibold mb-3">
+                Cover Letter (Optional)
+              </h3>
+              <textarea
+                id="cover-letter"
+                rows="3"
+                className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Add a personalized message to the employer..."
+              ></textarea>
+            </div>
+            {selectedJob.screeningQuestions &&
+              selectedJob.screeningQuestions.length > 0 && (
+                <div className="border-t border-gray-200 my-4 pt-4">
+                  <h3 className="text-lg font-semibold mb-3">
+                    Screening Questions
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Please answer all the screening questions below to complete
+                    your application. These questions help the employer evaluate
+                    your fit for the role.
+                  </p>
+
+                  {selectedJob.screeningQuestions.map((question, index) => (
+                    <div
+                      key={index}
+                      className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200"
+                    >
+                      <label className="block text-gray-700 font-medium mb-2">
+                        {index + 1}. {question.question}
+                        {question.required && (
+                          <span className="text-red-500 ml-1">*</span>
+                        )}
+                      </label>
+                      {question.expectedResponseType === "multiline" ? (
+                        <textarea
+                          id={`screening-${index}`}
+                          rows="4"
+                          className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Your answer..."
+                          required={question.required}
+                        ></textarea>
+                      ) : question.expectedResponseType === "choice" &&
+                        question.choices?.length > 0 ? (
+                        <select
+                          id={`screening-${index}`}
+                          className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                          required={question.required}
+                        >
+                          <option value="">Select an answer</option>
+                          {question.choices.map((choice, choiceIndex) => (
+                            <option key={choiceIndex} value={choice}>
+                              {choice}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <textarea
+                          id={`screening-${index}`}
+                          rows="2"
+                          className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Your answer..."
+                          required={question.required}
+                        ></textarea>
+                      )}
+                      {question.weight > 1 && (
+                        <p className="text-xs text-blue-600 mt-1">
+                          This question is weighted more heavily in the
+                          evaluation process.
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+            <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={() => setApplying(false)}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
-                onClick={handleApply}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                onClick={handleSubmitApplication}
+                className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition-colors"
               >
                 Submit Application
               </button>

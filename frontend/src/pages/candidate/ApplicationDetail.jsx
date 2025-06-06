@@ -39,7 +39,6 @@ const ApplicationDetail = () => {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [application?.messages]);
-
   // Fetch application data
   useEffect(() => {
     const fetchApplication = async () => {
@@ -47,17 +46,49 @@ const ApplicationDetail = () => {
         setLoading(true);
         const response = await api.get(`/applications/${id}`);
         setApplication(response.data);
+
+        // If this is a new application with no messages, initiate the chat
+        if (
+          user?.role === "candidate" &&
+          (!response.data.messages || response.data.messages.length === 0)
+        ) {
+          try {
+            // Show toast to indicate starting the interview
+            toast.info("Starting your AI interview session...");
+
+            // Send initial message to trigger AI interviewer
+            await api.post(`/applications/${id}/messages`, {
+              content:
+                "Hello, I've applied for this position and I'm ready for the interview questions.",
+            });
+
+            // Fetch the updated application with messages
+            const updatedResponse = await api.get(`/applications/${id}`);
+            setApplication(updatedResponse.data);
+
+            toast.success(
+              "Interview started! Please respond to the questions from the AI interviewer."
+            );
+          } catch (chatError) {
+            console.error("Error initiating interview chat:", chatError);
+            toast.error(
+              "There was a problem starting the interview. Please try refreshing the page."
+            );
+          }
+        }
+
         setLoading(false);
       } catch (error) {
         console.error("Error fetching application:", error);
-        toast.error("Failed to load application details");
+        toast.error(
+          error.response?.data?.message || "Failed to load application details"
+        );
         navigate(-1);
       }
     };
 
     fetchApplication();
-  }, [id, navigate]);
-
+  }, [id, navigate, user]);
   // Send a new message
   const handleSendMessage = async () => {
     if (!message.trim()) return;
@@ -73,7 +104,7 @@ const ApplicationDetail = () => {
       // Show message optimistically
       setApplication((prev) => ({
         ...prev,
-        messages: [...prev.messages, newMessage],
+        messages: [...(prev.messages || []), newMessage],
       }));
 
       // Clear input
@@ -85,13 +116,23 @@ const ApplicationDetail = () => {
       });
 
       // Update with actual message data
-      setApplication((prev) => ({
-        ...prev,
-        messages: response.data.messages,
-      }));
+      if (response.data && Array.isArray(response.data)) {
+        setApplication((prev) => ({
+          ...prev,
+          messages: response.data,
+        }));
+      } else {
+        console.warn(
+          "Received unexpected message format from API:",
+          response.data
+        );
+        // Attempt to fetch fresh application data
+        const updatedApplication = await api.get(`/applications/${id}`);
+        setApplication(updatedApplication.data);
+      }
     } catch (error) {
       console.error("Error sending message:", error);
-      toast.error("Failed to send message");
+      toast.error(error.response?.data?.message || "Failed to send message");
 
       // Revert optimistic update
       setApplication((prev) => ({
@@ -125,38 +166,23 @@ const ApplicationDetail = () => {
       toast.error("Failed to update application status");
     }
   };
-
   // Handle real-time updates
   useEffect(() => {
-    // Function to handle message updates
-    const handleNewMessage = (message) => {
-      if (message.applicationId === id) {
-        setApplication((prev) => ({
-          ...prev,
-          messages: [...prev.messages, message],
-        }));
+    // Instead of using subscriptions that don't exist, let's poll for updates
+    const pollInterval = setInterval(async () => {
+      try {
+        // Only poll if we have an application
+        if (id) {
+          const response = await api.get(`/applications/${id}`);
+          setApplication(response.data);
+        }
+      } catch (error) {
+        console.error("Error polling for updates:", error);
       }
-    };
+    }, 10000); // Poll every 10 seconds
 
-    // Function to handle status updates
-    const handleStatusUpdate = (data) => {
-      if (data.applicationId === id) {
-        setApplication((prev) => ({
-          ...prev,
-          status: data.status,
-          messages: data.messages || prev.messages,
-        }));
-      }
-    };
-
-    // Subscribe to updates
-    api.subscribeToMessages(id, handleNewMessage);
-    api.subscribeToStatusUpdates(id, handleStatusUpdate);
-
-    // Cleanup
     return () => {
-      api.unsubscribeFromMessages(id);
-      api.unsubscribeFromStatusUpdates(id);
+      clearInterval(pollInterval);
     };
   }, [id]);
 
@@ -250,7 +276,6 @@ const ApplicationDetail = () => {
                 </p>
                 <p className="text-gray-600">{application.job.location}</p>
               </div>
-
               <div className="mb-6">
                 <div className="text-sm text-gray-500 mb-1">Status</div>
                 <span
@@ -262,7 +287,6 @@ const ApplicationDetail = () => {
                     application.status.slice(1)}
                 </span>
               </div>
-
               <div className="mb-6">
                 <div className="text-sm text-gray-500 mb-1">Match Score</div>
                 <div className="flex items-center">
@@ -277,12 +301,10 @@ const ApplicationDetail = () => {
                   </span>
                 </div>
               </div>
-
               <div className="mb-6">
                 <div className="text-sm text-gray-500 mb-1">Applied on</div>
                 <div>{formatDate(application.createdAt)}</div>
-              </div>
-
+              </div>{" "}
               {application.llmRationale && (
                 <div className="mb-6">
                   <div className="text-sm text-gray-500 mb-1">AI Analysis</div>
@@ -291,7 +313,17 @@ const ApplicationDetail = () => {
                   </div>
                 </div>
               )}
-
+              {application.rejectionReason &&
+                application.status === "rejected" && (
+                  <div className="mb-6">
+                    <div className="text-sm text-gray-500 mb-1">
+                      Rejection Feedback
+                    </div>
+                    <div className="text-sm bg-red-50 p-3 rounded-lg border border-red-100">
+                      {application.rejectionReason}
+                    </div>
+                  </div>
+                )}
               {application.coverLetter && (
                 <div>
                   <div className="text-sm text-gray-500 mb-1">Cover Letter</div>
@@ -346,6 +378,12 @@ const ApplicationDetail = () => {
           <div className="bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col">
             <div className="p-6 border-b">
               <h2 className="text-xl font-bold">Messages</h2>
+              {user?.role === "candidate" && (
+                <div className="mt-2 text-sm text-gray-600">
+                  This is your interview chat. Answer the questions from the AI
+                  interviewer to improve your chances of getting shortlisted.
+                </div>
+              )}
             </div>
 
             <div

@@ -10,6 +10,7 @@ import {
   faCheck,
   faTimes,
   faExternalLinkAlt,
+  faEye,
 } from "@fortawesome/free-solid-svg-icons";
 import { faStar as faStarOutline } from "@fortawesome/free-regular-svg-icons";
 import { toast } from "react-toastify";
@@ -575,18 +576,18 @@ const CandidateReview = () => {
                       }}
                     />
                   </div>
-                </div>
+                </div>{" "}
               </div>
               {renderMatchingScores(application._id)}
               {renderLLMExplanation(application._id)}
-              {/* Actions */}{" "}
+              {/* Actions */}
               <div className="flex justify-between items-center mt-4">
                 <Link
-                  to={`/applications/${application._id}`}
-                  className="text-primary-400 hover:text-primary-300 text-sm"
+                  to={`/company/applications/${application._id}`}
+                  className="text-primary-400 hover:text-primary-300 text-sm flex items-center"
                 >
+                  <FontAwesomeIcon icon={faEye} className="mr-1" />
                   View Details
-                  <FontAwesomeIcon icon={faExternalLinkAlt} className="ml-1" />
                 </Link>
                 {!["accepted", "rejected", "hired"].includes(
                   application.status

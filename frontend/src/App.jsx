@@ -28,6 +28,7 @@ import ResumeProfile from "./pages/candidate/ResumeProfile.jsx";
 import CandidateMessages from "./pages/candidate/Messages.jsx";
 import ApplicationForm from "./pages/candidate/ApplicationForm.jsx";
 import ApplicationDetail from "./pages/candidate/ApplicationDetail.jsx";
+import CompanyApplicationDetail from "./pages/company/ApplicationDetail.jsx";
 import CompanyDashboard from "./pages/company/Dashboard.jsx";
 import JobPostings from "./pages/company/JobPostings.jsx";
 import CandidateReview from "./pages/company/CandidateReview.jsx";
@@ -106,11 +107,15 @@ function App() {
                 <Route
                   path="/company/candidates/:id/analysis"
                   element={<CandidateAnalysis />}
-                />
+                />{" "}
                 <Route path="/company/messages" element={<CompanyMessages />} />
                 <Route
                   path="/company/analytics"
                   element={<CompanyAnalytics />}
+                />{" "}
+                <Route
+                  path="/company/applications/:id"
+                  element={<CompanyApplicationDetail />}
                 />
               </Route>
             </Route>

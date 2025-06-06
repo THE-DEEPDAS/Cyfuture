@@ -61,8 +61,14 @@ const calculateSkillsMatch = (job, candidate) => {
 
 const calculateExperienceMatch = (job, candidate) => {
   const requiredYears = job.experience?.minYears || 0;
-  const candidateYears =
-    candidate.experience?.reduce((total, exp) => {
+
+  // Safely handle candidate experience, ensuring it's an array before using reduce
+  let candidateYears = 0;
+  let relevanceScore = 0;
+
+  if (Array.isArray(candidate.experience)) {
+    // Calculate total years of experience
+    candidateYears = candidate.experience.reduce((total, exp) => {
       try {
         const start = new Date(exp.startDate);
         const end =
@@ -82,11 +88,10 @@ const calculateExperienceMatch = (job, candidate) => {
         console.error("Error calculating experience duration:", error);
         return total;
       }
-    }, 0) || 0;
+    }, 0);
 
-  const yearsScore = Math.min(candidateYears / Math.max(requiredYears, 1), 1);
-  let relevanceScore =
-    candidate.experience?.reduce((score, exp) => {
+    // Calculate relevance score
+    relevanceScore = candidate.experience.reduce((score, exp) => {
       if (!exp.title || !job.title) return score;
       const titleRelevance = job.title
         .toLowerCase()
@@ -94,7 +99,38 @@ const calculateExperienceMatch = (job, candidate) => {
         ? 1
         : 0.5;
       return Math.max(score, titleRelevance);
-    }, 0) || 0;
+    }, 0);
+  } else if (
+    typeof candidate.experience === "object" &&
+    candidate.experience !== null
+  ) {
+    // Handle case where experience might be a single object instead of an array
+    try {
+      const exp = candidate.experience;
+      const start = new Date(exp.startDate);
+      const end =
+        exp.endDate === "Present" ? new Date() : new Date(exp.endDate);
+
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+        const months =
+          (end.getFullYear() - start.getFullYear()) * 12 +
+          (end.getMonth() - start.getMonth());
+        candidateYears = months / 12;
+      }
+
+      if (exp.title && job.title) {
+        relevanceScore = job.title
+          .toLowerCase()
+          .includes(exp.title.toLowerCase())
+          ? 1
+          : 0.5;
+      }
+    } catch (error) {
+      console.error("Error calculating experience from object:", error);
+    }
+  }
+
+  const yearsScore = Math.min(candidateYears / Math.max(requiredYears, 1), 1);
 
   return {
     score: yearsScore * 0.7 + relevanceScore * 0.3,

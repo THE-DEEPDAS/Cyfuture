@@ -54,6 +54,10 @@ const applicationSchema = new mongoose.Schema(
       default: 0,
       index: true,
     },
+    rejectionReason: {
+      type: String,
+      required: false,
+    },
     matchingScores: {
       skills: Number,
       experience: Number,
@@ -114,7 +118,12 @@ const applicationSchema = new mongoose.Schema(
       {
         question: {
           type: mongoose.Schema.Types.ObjectId,
+          ref: "Job.screeningQuestions",
           required: true,
+        },
+        questionText: {
+          type: String,
+          trim: true,
         },
         response: {
           type: String,
