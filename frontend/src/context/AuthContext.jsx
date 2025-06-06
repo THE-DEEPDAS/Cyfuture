@@ -21,6 +21,7 @@ function useAuth() {
 // Auth provider component
 const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [currentUser, setCurrentUser] = useState(null);
@@ -32,24 +33,54 @@ const AuthProvider = ({ children }) => {
     const initAuth = async () => {
       console.log("AuthContext: Initializing auth");
       setLoading(true);
+      setError(null);
+
       const token = localStorage.getItem("token");
       console.log("Auth initialization - Token exists:", !!token);
 
       if (token) {
         try {
-          // Set auth header
+          // Set auth header with retry enabled
           api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-          // Get user data
+          // Get user data with retry enabled
           console.log("Fetching user data...");
-          const { data } = await api.get("/users/me");
+          const { data } = await api.get("/users/me", {
+            retry: true,
+            headers: {
+              "Cache-Control": "no-cache",
+              Pragma: "no-cache",
+            },
+          });
+
           console.log("User data fetched:", data);
           dispatch(setUserInfo(data));
           setCurrentUser(data);
         } catch (error) {
           console.error("Auth initialization failed:", error);
+
+          // Check for specific error types
+          if (error.code === "ECONNREFUSED") {
+            setError(
+              "Unable to connect to server. Please check your connection."
+            );
+            toast.error("Connection failed. Retrying...");
+          } else if (error.response?.status === 401) {
+            // Invalid or expired token
+            localStorage.removeItem("token");
+            delete api.defaults.headers.common["Authorization"];
+            toast.error("Session expired. Please login again.");
+            navigate("/login");
+          } else {
+            setError("Authentication failed. Please try again later.");
+            toast.error("Authentication failed");
+          }
+
+          // Clear auth state
           localStorage.removeItem("token");
           delete api.defaults.headers.common["Authorization"];
+          dispatch(clearUserInfo());
+          setCurrentUser(null);
         }
       }
 
@@ -63,7 +94,10 @@ const AuthProvider = ({ children }) => {
   // Login function
   const login = async (credentials) => {
     try {
-      const { data } = await api.post("/auth/login", credentials);
+      setError(null);
+      const { data } = await api.post("/auth/login", credentials, {
+        retry: true,
+      });
       console.log("Login successful, user data:", data);
 
       localStorage.setItem("token", data.token);
@@ -73,7 +107,6 @@ const AuthProvider = ({ children }) => {
       setCurrentUser(data.user);
 
       console.log("User set in state:", data.user);
-
       toast.success("Login successful!");
 
       // Redirect based on user role
@@ -88,9 +121,13 @@ const AuthProvider = ({ children }) => {
       return true;
     } catch (error) {
       console.error("Login error:", error);
-      toast.error(
-        error.response?.data?.message || "Login failed. Please try again."
-      );
+      const errorMessage =
+        error.response?.data?.message ||
+        (error.code === "ECONNREFUSED"
+          ? "Unable to connect to server"
+          : "Login failed. Please try again.");
+      setError(errorMessage);
+      toast.error(errorMessage);
       return false;
     }
   };
@@ -98,7 +135,10 @@ const AuthProvider = ({ children }) => {
   // Register function
   const register = async (userData) => {
     try {
-      const { data } = await api.post("/auth/register", userData);
+      setError(null);
+      const { data } = await api.post("/auth/register", userData, {
+        retry: true,
+      });
 
       localStorage.setItem("token", data.token);
       api.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
@@ -117,10 +157,14 @@ const AuthProvider = ({ children }) => {
 
       return true;
     } catch (error) {
-      toast.error(
+      console.error("Registration error:", error);
+      const errorMessage =
         error.response?.data?.message ||
-          "Registration failed. Please try again."
-      );
+        (error.code === "ECONNREFUSED"
+          ? "Unable to connect to server"
+          : "Registration failed. Please try again.");
+      setError(errorMessage);
+      toast.error(errorMessage);
       return false;
     }
   };
@@ -131,6 +175,7 @@ const AuthProvider = ({ children }) => {
     delete api.defaults.headers.common["Authorization"];
     dispatch(clearUserInfo());
     setCurrentUser(null);
+    setError(null);
     navigate("/login");
     toast.info("You have been logged out.");
   };
@@ -138,6 +183,7 @@ const AuthProvider = ({ children }) => {
   const value = {
     user: currentUser,
     loading,
+    error,
     login,
     register,
     logout,

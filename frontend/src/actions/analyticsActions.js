@@ -12,7 +12,7 @@ export const getJobAnalytics =
     try {
       dispatch({ type: ANALYTICS_REQUEST });
 
-      const { data } = await api.get(`/api/analytics/jobs`, {
+      const { data } = await api.get(`/analytics/jobs`, {
         params: { timeRange, jobId },
       });
 

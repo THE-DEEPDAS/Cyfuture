@@ -30,7 +30,7 @@ export const applyForJob = createAsyncThunk(
   "jobs/applyForJob",
   async ({ jobId, resumeId, coverLetter }, { rejectWithValue }) => {
     try {
-      const response = await api.post(`/api/jobs/${jobId}/apply`, {
+      const response = await api.post(`/jobs/${jobId}/apply`, {
         resumeId,
         coverLetter,
       });

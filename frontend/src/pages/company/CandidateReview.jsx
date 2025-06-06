@@ -310,13 +310,12 @@ const CandidateReview = () => {
       </div>
     );
   };
-
   const handleStatusChange = async (applicationId, status) => {
     if (actionLoading) return;
 
     try {
       setActionLoading(true);
-      await api.post(`/applications/${applicationId}/status`, { status });
+      await api.put(`/applications/${applicationId}/status`, { status });
 
       // Update the application status locally
       setApplications((prevApplications) =>
@@ -330,6 +329,64 @@ const CandidateReview = () => {
       toast.error(
         err.response?.data?.message || `Failed to update application status`
       );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+  const handleApplicationAction = async (applicationId, action) => {
+    if (actionLoading) return;
+
+    try {
+      setActionLoading(true);
+      let status;
+      let endpoint;
+
+      switch (action) {
+        case "accept":
+          status = "accepted";
+          endpoint = "accept";
+          break;
+        case "reject":
+          status = "rejected";
+          endpoint = "reject";
+          break;
+        case "hire":
+          status = "hired";
+          endpoint = "hire";
+          break;
+        case "shortlist":
+          status = "shortlisted";
+          endpoint = "shortlist";
+          break;
+        default:
+          throw new Error("Invalid action");
+      }
+
+      // Use the specific endpoint for each action
+      await api.post(`/applications/${applicationId}/${endpoint}`);
+
+      // Update application status locally
+      setApplications((prevApplications) =>
+        prevApplications.map((app) =>
+          app._id === applicationId ? { ...app, status } : app
+        )
+      );
+
+      // Update shortlist if needed
+      if (action === "shortlist") {
+        setShortlistedCandidates((prev) => [...prev, applicationId]);
+      } else if (status === "rejected") {
+        setShortlistedCandidates((prev) =>
+          prev.filter((id) => id !== applicationId)
+        );
+      }
+
+      toast.success(`Candidate ${action}ed successfully`);
+    } catch (err) {
+      const errorMessage =
+        err.response?.data?.message || `Failed to ${action} candidate`;
+      console.error(`Error ${action}ing candidate:`, err);
+      toast.error(errorMessage);
     } finally {
       setActionLoading(false);
     }
@@ -485,7 +542,6 @@ const CandidateReview = () => {
                   />
                 </button>
               </div>
-
               {/* Matching Score */}
               <div className="mb-4">
                 <h4 className="text-sm font-medium text-gray-400 mb-2">
@@ -521,11 +577,9 @@ const CandidateReview = () => {
                   </div>
                 </div>
               </div>
-
               {renderMatchingScores(application._id)}
               {renderLLMExplanation(application._id)}
-
-              {/* Actions */}
+              {/* Actions */}{" "}
               <div className="flex justify-between items-center mt-4">
                 <Link
                   to={`/applications/${application._id}`}
@@ -534,26 +588,30 @@ const CandidateReview = () => {
                   View Details
                   <FontAwesomeIcon icon={faExternalLinkAlt} className="ml-1" />
                 </Link>
-                <div className="space-x-2">
-                  <button
-                    onClick={() =>
-                      handleStatusChange(application._id, "accepted")
-                    }
-                    disabled={actionLoading}
-                    className="btn btn-sm btn-success"
-                  >
-                    <FontAwesomeIcon icon={faCheck} />
-                  </button>
-                  <button
-                    onClick={() =>
-                      handleStatusChange(application._id, "rejected")
-                    }
-                    disabled={actionLoading}
-                    className="btn btn-sm btn-error"
-                  >
-                    <FontAwesomeIcon icon={faTimes} />
-                  </button>
-                </div>
+                {!["accepted", "rejected", "hired"].includes(
+                  application.status
+                ) && (
+                  <div className="space-x-2">
+                    <button
+                      onClick={() =>
+                        handleApplicationAction(application._id, "accept")
+                      }
+                      disabled={actionLoading}
+                      className="btn btn-sm btn-success"
+                    >
+                      <FontAwesomeIcon icon={faCheck} />
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleApplicationAction(application._id, "reject")
+                      }
+                      disabled={actionLoading}
+                      className="btn btn-sm btn-error"
+                    >
+                      <FontAwesomeIcon icon={faTimes} />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}

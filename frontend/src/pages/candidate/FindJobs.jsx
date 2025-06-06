@@ -2,9 +2,17 @@ import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useNavigate } from "react-router-dom";
-import api from "../../../src/utils/api";
 import { selectUserInfo } from "../../../src/slices/authSlice";
 import { toast } from "react-toastify";
+import api from "../../../src/utils/api";
+import {
+  formatSalary,
+  applyForJob,
+  calculateMatchScore,
+  fetchJobsWithFilters,
+  getMatchScoreStyle,
+  formatDate,
+} from "../../services/jobService";
 
 const FindJobs = () => {
   const [jobs, setJobs] = useState([]);
@@ -48,6 +56,7 @@ const FindJobs = () => {
     ],
   };
   const userInfo = useSelector(selectUserInfo);
+  const navigate = useNavigate();
 
   // Initialize filters with user skills when userInfo changes
   useEffect(() => {
@@ -329,6 +338,77 @@ const FindJobs = () => {
     return `${formatter.format(salaryObj.min)} - ${formatter.format(
       salaryObj.max
     )}`;
+  };
+
+  const handleApply = async (job) => {
+    try {
+      if (!userInfo) {
+        toast.error("Please log in to apply for jobs");
+        navigate("/login");
+        return;
+      }
+
+      setSelectedJob(job);
+      setApplying(true);
+
+      // Show loading toast
+      const loadingToast = toast.loading("Submitting your application...");
+
+      try {
+        // Get default resume
+        const resumeResponse = await api.get("/resumes/default");
+        if (!resumeResponse.data?._id) {
+          toast.dismiss(loadingToast);
+          toast.error("Please create a resume before applying");
+          navigate("/candidate/resume");
+          return;
+        }
+
+        const response = await applyForJob(job._id, resumeResponse.data._id);
+        toast.dismiss(loadingToast);
+        toast.success("Application submitted successfully!");
+
+        // Update job application count locally
+        setJobs((prevJobs) =>
+          prevJobs.map((j) =>
+            j._id === job._id
+              ? { ...j, applicationCount: (j.applicationCount || 0) + 1 }
+              : j
+          )
+        );
+
+        // Update filtered jobs as well
+        setFilteredJobs((prevFiltered) =>
+          prevFiltered.map((j) =>
+            j._id === job._id
+              ? { ...j, applicationCount: (j.applicationCount || 0) + 1 }
+              : j
+          )
+        );
+
+        // Close the application modal
+        setApplying(false);
+        setSelectedJob(null);
+      } catch (error) {
+        toast.dismiss(loadingToast);
+        console.error("Application error:", error);
+
+        if (
+          error.response?.status === 400 &&
+          error.response.data?.message?.includes("already applied")
+        ) {
+          toast.error("You have already applied for this job");
+        } else if (error.response?.status === 404) {
+          toast.error("Job posting no longer available");
+        } else {
+          toast.error(
+            error.response?.data?.message || "Failed to submit application"
+          );
+        }
+      }
+    } finally {
+      setApplying(false);
+    }
   };
 
   return (

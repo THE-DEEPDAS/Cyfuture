@@ -18,6 +18,9 @@ import {
   getLLMAnalysis,
   getMatchingScores,
   getJobApplications,
+  acceptApplication,
+  rejectApplication,
+  hireCandidate,
 } from "../controllers/applicationController.js";
 
 const router = express.Router();
@@ -39,6 +42,15 @@ router.get("/:id", protect, getApplicationById);
 
 // @route   PUT /api/applications/:id/status
 router.put("/:id/status", protect, companyOnly, updateApplicationStatus);
+
+// @route   POST /api/applications/:id/accept
+router.post("/:id/accept", protect, companyOnly, acceptApplication);
+
+// @route   POST /api/applications/:id/reject
+router.post("/:id/reject", protect, companyOnly, rejectApplication);
+
+// @route   POST /api/applications/:id/hire
+router.post("/:id/hire", protect, companyOnly, hireCandidate);
 
 // @route   POST /api/applications/:id/shortlist
 router.post("/:id/shortlist", protect, companyOnly, shortlistCandidate);

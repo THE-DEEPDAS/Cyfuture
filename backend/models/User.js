@@ -69,7 +69,15 @@ const userSchema = new mongoose.Schema(
       {
         type: {
           type: String,
-          enum: ["message", "application", "status", "match", "system"],
+          enum: [
+            "message",
+            "application",
+            "status",
+            "match",
+            "system",
+            "APPLICATION_REJECTED",
+            "APPLICATION_ACCEPTED",
+          ],
           required: true,
         },
         title: {

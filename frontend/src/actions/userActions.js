@@ -57,14 +57,13 @@ export const logout = () => (dispatch) => {
 export const register = (name, email, password) => async (dispatch) => {
   try {
     dispatch({ type: USER_REGISTER_REQUEST });
-
     const config = {
       headers: {
         "Content-Type": "application/json",
       },
     };
-    const { data } = await axios.post(
-      `${API_URL}/auth/register`,
+    const { data } = await api.post(
+      `/auth/register`,
       { name, email, password },
       config
     );

@@ -41,7 +41,7 @@ export const updateApplicationStatus =
     try {
       dispatch({ type: "APPLICATION_UPDATE_REQUEST" });
       const { data } = await api.put(
-        `/api/jobs/${jobId}/applications/${applicationId}`,
+        `/jobs/${jobId}/applications/${applicationId}`,
         {
           status,
         }

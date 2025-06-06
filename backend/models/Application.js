@@ -5,29 +5,43 @@ const applicationSchema = new mongoose.Schema(
     job: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Job",
-      required: true,
+      required: [true, "Job is required"],
+      index: true,
     },
     candidate: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: [true, "Candidate is required"],
+      index: true,
     },
     resume: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Resume",
-      required: true,
+      required: [true, "Resume is required"],
     },
     coverLetter: {
       type: String,
+      required: false,
+      trim: true,
     },
     status: {
       type: String,
-      enum: ["pending", "reviewing", "shortlisted", "rejected", "hired"],
+      enum: [
+        "pending",
+        "reviewing",
+        "shortlisted",
+        "accepted",
+        "rejected",
+        "hired",
+      ],
       default: "pending",
+      required: true,
+      index: true,
     },
     shortlisted: {
       type: Boolean,
       default: false,
+      index: true,
     },
     isShortlisted: {
       type: Boolean,
@@ -37,6 +51,8 @@ const applicationSchema = new mongoose.Schema(
       type: Number,
       min: 0,
       max: 100,
+      default: 0,
+      index: true,
     },
     matchingScores: {
       skills: Number,
@@ -47,32 +63,30 @@ const applicationSchema = new mongoose.Schema(
       explanation: String,
       language: String,
       confidence: Number,
-    },
-    llmRationale: {
-      type: String,
-    },
-    analysisDetails: {
-      factorScores: {
-        skills: {
-          score: Number,
-          justification: String,
+      llmRationale: String,
+      analysisDetails: {
+        factorScores: {
+          skills: {
+            score: Number,
+            justification: String,
+          },
+          experience: {
+            score: Number,
+            justification: String,
+          },
+          education: {
+            score: Number,
+            justification: String,
+          },
+          profileCompleteness: {
+            score: Number,
+            justification: String,
+          },
         },
-        experience: {
-          score: Number,
-          justification: String,
-        },
-        education: {
-          score: Number,
-          justification: String,
-        },
-        profileCompleteness: {
-          score: Number,
-          justification: String,
-        },
+        strengths: [String],
+        gaps: [String],
+        summary: String,
       },
-      strengths: [String],
-      gaps: [String],
-      summary: String,
     },
     messages: [
       {
@@ -84,6 +98,7 @@ const applicationSchema = new mongoose.Schema(
         content: {
           type: String,
           required: true,
+          trim: true,
         },
         language: {
           type: String,
@@ -104,6 +119,7 @@ const applicationSchema = new mongoose.Schema(
         response: {
           type: String,
           required: true,
+          trim: true,
         },
         llmEvaluation: {
           score: {
@@ -143,19 +159,45 @@ const applicationSchema = new mongoose.Schema(
         enum: ["strong_yes", "yes", "maybe", "no", "strong_no"],
       },
     },
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
-    updatedAt: {
-      type: Date,
-      default: Date.now,
-    },
   },
   {
     timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
+
+// Add compound index for faster queries
+applicationSchema.index({ job: 1, candidate: 1 }, { unique: true });
+applicationSchema.index({ createdAt: -1 });
+applicationSchema.index({ matchScore: -1 });
+applicationSchema.index({ status: 1, createdAt: -1 });
+
+// Add virtual fields
+applicationSchema.virtual("isNew").get(function () {
+  const hoursSinceCreated = (Date.now() - this.createdAt) / (1000 * 60 * 60);
+  return hoursSinceCreated < 24;
+});
+
+// Add middleware to handle references
+applicationSchema.pre("find", function () {
+  this.populate({
+    path: "job",
+    select: "title company location type status",
+  });
+});
+
+// Add middleware to ensure required fields
+applicationSchema.pre("save", async function (next) {
+  if (this.isNew) {
+    if (!this.job || !this.candidate || !this.resume) {
+      const err = new Error("Missing required fields");
+      err.status = 400;
+      return next(err);
+    }
+  }
+  next();
+});
 
 const Application = mongoose.model("Application", applicationSchema);
 

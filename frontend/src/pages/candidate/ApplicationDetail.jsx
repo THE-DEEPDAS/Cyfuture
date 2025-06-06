@@ -64,35 +64,135 @@ const ApplicationDetail = () => {
 
     try {
       setSending(true);
-      const response = await axios.post(`/api/applications/${id}/messages`, {
+      const newMessage = {
+        content: message,
+        sender: user.role === "company" ? "company" : "candidate",
+        createdAt: new Date().toISOString(),
+      };
+
+      // Show message optimistically
+      setApplication((prev) => ({
+        ...prev,
+        messages: [...prev.messages, newMessage],
+      }));
+
+      // Clear input
+      setMessage("");
+
+      // Make API call
+      const response = await api.post(`/applications/${id}/messages`, {
         content: message,
       });
 
-      // Update application with new messages
+      // Update with actual message data
       setApplication((prev) => ({
         ...prev,
-        messages: response.data,
+        messages: response.data.messages,
       }));
-
-      setMessage("");
     } catch (error) {
       console.error("Error sending message:", error);
       toast.error("Failed to send message");
+
+      // Revert optimistic update
+      setApplication((prev) => ({
+        ...prev,
+        messages: prev.messages.slice(0, -1),
+      }));
+      setMessage(message); // Restore message in input
     } finally {
       setSending(false);
     }
   };
 
-  // Format date
+  // Handle status updates (for company users)
+  const handleStatusChange = async (newStatus) => {
+    try {
+      // Send status update request
+      const response = await api.put(`/applications/${id}/status`, {
+        status: newStatus,
+      });
+
+      // Update local state
+      setApplication((prev) => ({
+        ...prev,
+        status: response.data.status,
+        messages: response.data.messages, // API returns updated messages including system message
+      }));
+
+      toast.success(`Application status updated to ${newStatus}`);
+    } catch (error) {
+      console.error("Error updating status:", error);
+      toast.error("Failed to update application status");
+    }
+  };
+
+  // Handle real-time updates
+  useEffect(() => {
+    // Function to handle message updates
+    const handleNewMessage = (message) => {
+      if (message.applicationId === id) {
+        setApplication((prev) => ({
+          ...prev,
+          messages: [...prev.messages, message],
+        }));
+      }
+    };
+
+    // Function to handle status updates
+    const handleStatusUpdate = (data) => {
+      if (data.applicationId === id) {
+        setApplication((prev) => ({
+          ...prev,
+          status: data.status,
+          messages: data.messages || prev.messages,
+        }));
+      }
+    };
+
+    // Subscribe to updates
+    api.subscribeToMessages(id, handleNewMessage);
+    api.subscribeToStatusUpdates(id, handleStatusUpdate);
+
+    // Cleanup
+    return () => {
+      api.unsubscribeFromMessages(id);
+      api.unsubscribeFromStatusUpdates(id);
+    };
+  }, [id]);
+
+  // Format date utilities
   const formatDate = (dateString) => {
-    const options = {
+    if (!dateString) return "";
+
+    const date = new Date(dateString);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    // If today, show time only
+    if (date.toDateString() === today.toDateString()) {
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+
+    // If yesterday, show "Yesterday" and time
+    if (date.toDateString() === yesterday.toDateString()) {
+      return `Yesterday at ${date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}`;
+    }
+
+    // Otherwise show full date and time
+    return date.toLocaleString([], {
       year: "numeric",
       month: "short",
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-    };
-    return new Date(dateString).toLocaleString(undefined, options);
+    });
   };
 
   // Get icon for message sender

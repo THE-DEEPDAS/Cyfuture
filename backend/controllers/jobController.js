@@ -601,3 +601,63 @@ export const getAllJobs = asyncHandler(async (req, res) => {
     total,
   });
 });
+
+/**
+ * @desc    Analyze screening responses
+ * @route   POST /api/jobs/:id/analyze-responses
+ * @access  Private/Company
+ */
+export const analyzeResponses = asyncHandler(async (req, res) => {
+  const { responses, resumeId } = req.body;
+  const job = await Job.findById(req.params.id);
+
+  if (!job) {
+    res.status(404);
+    throw new Error("Job not found");
+  }
+
+  if (!job.screeningQuestions || job.screeningQuestions.length === 0) {
+    return res.json({
+      isRecommended: true,
+      analysis: "No screening questions required for this position.",
+      score: 100,
+    });
+  }
+
+  // Get candidate resume
+  const resume = await Resume.findById(resumeId);
+  if (!resume) {
+    res.status(404);
+    throw new Error("Resume not found");
+  }
+
+  // Use LLM to analyze responses and resume against job requirements
+  const analysis = await analyzeCandidate(resume.parsedData, job, responses);
+
+  // Calculate recommendation
+  const isRecommended = analysis.score >= 70;
+  let feedback = "";
+
+  if (isRecommended) {
+    feedback =
+      "Based on your responses and resume, you appear to be a strong fit for this role.";
+  } else {
+    feedback =
+      "While we appreciate your interest, there may be some gaps between your profile and the job requirements.";
+  }
+
+  // Include specific feedback points
+  const strengthPoints = analysis.strengths.slice(0, 3);
+  const improvementPoints = analysis.weaknesses.slice(0, 3);
+
+  res.json({
+    isRecommended,
+    analysis: {
+      feedback,
+      score: analysis.score,
+      strengths: strengthPoints,
+      improvements: improvementPoints,
+      recommendation: analysis.recommendation,
+    },
+  });
+});

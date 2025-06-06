@@ -23,7 +23,6 @@ import HomePage from "./pages/HomePage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx";
 import CandidateDashboard from "./pages/candidate/Dashboard.jsx";
-import JobSearch from "./pages/candidate/JobSearch.jsx";
 import ResumeManager from "./pages/candidate/ResumeManager.jsx";
 import ResumeProfile from "./pages/candidate/ResumeProfile.jsx";
 import CandidateMessages from "./pages/candidate/Messages.jsx";

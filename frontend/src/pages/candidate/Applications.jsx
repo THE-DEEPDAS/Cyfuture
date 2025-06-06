@@ -14,6 +14,7 @@ import {
   faFilter,
 } from "@fortawesome/free-solid-svg-icons";
 import api from "../../utils/api";
+import { toast } from "react-toastify";
 
 const ApplicationDashboard = () => {
   const [applications, setApplications] = useState([]);
@@ -48,48 +49,22 @@ const ApplicationDashboard = () => {
       try {
         setLoading(true);
         const response = await api.get("/applications/candidate");
-        setApplications(response.data);
+        if (!response.data) {
+          toast.error("Failed to fetch applications");
+          setApplications([]);
+          return;
+        }
+        // Validate and filter out any malformed application data
+        const validApplications = response.data.filter(
+          (app) => app && app.job && app.job.company && app.job.title
+        );
+        setApplications(validApplications);
       } catch (error) {
         console.error("Error fetching applications:", error);
-        // Set sample data for development purposes
-        setApplications([
-          {
-            _id: "1",
-            job: {
-              _id: "101",
-              title: "Frontend Developer",
-              company: { companyName: "Tech Innovations" },
-              location: "San Francisco, CA",
-            },
-            status: "pending",
-            matchScore: 85,
-            createdAt: "2025-05-15T14:30:00Z",
-          },
-          {
-            _id: "2",
-            job: {
-              _id: "102",
-              title: "UX Designer",
-              company: { companyName: "Design Studios" },
-              location: "Remote",
-            },
-            status: "shortlisted",
-            matchScore: 92,
-            createdAt: "2025-05-10T09:15:00Z",
-          },
-          {
-            _id: "3",
-            job: {
-              _id: "103",
-              title: "Full Stack Developer",
-              company: { companyName: "StartupXYZ" },
-              location: "New York, NY",
-            },
-            status: "rejected",
-            matchScore: 65,
-            createdAt: "2025-05-05T11:45:00Z",
-          },
-        ]);
+        toast.error(
+          error.response?.data?.message || "Failed to fetch applications"
+        );
+        setApplications([]);
       } finally {
         setLoading(false);
       }

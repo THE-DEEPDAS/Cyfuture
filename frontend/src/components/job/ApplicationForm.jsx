@@ -8,23 +8,20 @@ import { applyForJob } from "../../actions/jobActions";
 import Message from "../common/Message";
 import Loader from "../common/Loader";
 import ErrorBoundary from "../common/ErrorBoundary";
+import ResumeSelector from "../common/ResumeSelector";
+import ChatbotAssistant from "../common/ChatbotAssistant";
+import api from "../../api";
 
 const ApplicationForm = ({ job, onClose }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-
-  // Form state with validation
-  const [formState, setFormState] = useState({
-    currentQuestionIndex: 0,
-    responses:
-      job?.screeningQuestions?.map((q) => ({
-        question: q._id,
-        response: "",
-        isValid: !q.required,
-      })) || [],
+  const [step, setStep] = useState(1);
+  const [formData, setFormData] = useState({
     selectedResume: "",
-    isFormValid: false,
+    responses: [],
+    chatbotComplete: false,
   });
+  const [chatbotAnalysis, setChatbotAnalysis] = useState(null);
 
   // Get user resumes from Redux
   const userResumes = useSelector((state) => state.userResumes);
@@ -40,17 +37,17 @@ const ApplicationForm = ({ job, onClose }) => {
   // Validate form whenever responses change
   useEffect(() => {
     validateForm();
-  }, [formState.responses, formState.selectedResume]);
+  }, [formData.responses, formData.selectedResume]);
 
   const validateForm = () => {
     if (resumesLoading) return false;
 
     const isValid =
-      formState.selectedResume &&
+      formData.selectedResume &&
       (!job?.screeningQuestions?.length ||
-        formState.responses.every((response) => response.isValid));
+        formData.responses.every((response) => response.isValid));
 
-    setFormState((prev) => ({ ...prev, isFormValid: isValid }));
+    setFormData((prev) => ({ ...prev, isFormValid: isValid }));
   };
 
   const validateResponse = (response, question) => {
@@ -75,29 +72,29 @@ const ApplicationForm = ({ job, onClose }) => {
   const handleResponseChange = (e) => {
     const response = e.target.value;
     const currentQuestion =
-      job?.screeningQuestions?.[formState.currentQuestionIndex];
+      job?.screeningQuestions?.[formData.currentQuestionIndex];
 
     if (!currentQuestion) return;
 
     const isValid = validateResponse(response, currentQuestion);
 
-    const updatedResponses = [...formState.responses];
-    updatedResponses[formState.currentQuestionIndex] = {
-      ...updatedResponses[formState.currentQuestionIndex],
+    const updatedResponses = [...formData.responses];
+    updatedResponses[formData.currentQuestionIndex] = {
+      ...updatedResponses[formData.currentQuestionIndex],
       response,
       isValid,
     };
 
-    setFormState((prev) => ({
+    setFormData((prev) => ({
       ...prev,
       responses: updatedResponses,
     }));
   };
 
   const handleNext = () => {
-    const currentResponse = formState.responses[formState.currentQuestionIndex];
+    const currentResponse = formData.responses[formData.currentQuestionIndex];
     const currentQuestion =
-      job?.screeningQuestions?.[formState.currentQuestionIndex];
+      job?.screeningQuestions?.[formData.currentQuestionIndex];
 
     if (!currentQuestion) return;
 
@@ -109,14 +106,14 @@ const ApplicationForm = ({ job, onClose }) => {
       return;
     }
 
-    setFormState((prev) => ({
+    setFormData((prev) => ({
       ...prev,
       currentQuestionIndex: prev.currentQuestionIndex + 1,
     }));
   };
 
   const handleBack = () => {
-    setFormState((prev) => ({
+    setFormData((prev) => ({
       ...prev,
       currentQuestionIndex: Math.max(0, prev.currentQuestionIndex - 1),
     }));
@@ -128,38 +125,72 @@ const ApplicationForm = ({ job, onClose }) => {
       return;
     }
 
-    setFormState((prev) => ({
+    setFormData((prev) => ({
       ...prev,
       selectedResume: resumeId,
     }));
   };
 
+  const handleChatbotComplete = async (responses) => {
+    try {
+      // Analyze responses using the job's screening criteria
+      const analysis = await api.post(`/jobs/${job._id}/analyze-responses`, {
+        responses,
+        resumeId: formData.selectedResume,
+      });
+
+      setChatbotAnalysis(analysis.data);
+      setFormData((prev) => ({
+        ...prev,
+        responses,
+        chatbotComplete: true,
+      }));
+
+      if (!analysis.data.isRecommended) {
+        toast.info(
+          "Based on the analysis, this role might not be the best fit. Consider reviewing the job requirements."
+        );
+      }
+    } catch (error) {
+      console.error("Chatbot analysis error:", error);
+      toast.error("Error analyzing your responses. Please try again.");
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formState.isFormValid) {
-      toast.error("Please complete all required fields before submitting");
+    if (!formData.selectedResume) {
+      toast.error("Please select a resume");
       return;
     }
 
-    if (!job?._id) {
-      toast.error("Invalid job data");
+    if (!formData.chatbotComplete) {
+      toast.error("Please complete the screening questions");
       return;
     }
 
     try {
-      await dispatch(
+      const response = await dispatch(
         applyForJob({
           jobId: job._id,
-          resumeId: formState.selectedResume,
-          screeningResponses: formState.responses.map((r) => ({
+          resumeId: formData.selectedResume,
+          screeningResponses: formData.responses.map((r) => ({
             question: r.question,
             response: r.response,
           })),
+          analysis: chatbotAnalysis,
         })
       );
-    } catch (err) {
-      toast.error("Failed to submit application. Please try again.");
+
+      if (response.success) {
+        toast.success("Application submitted successfully!");
+        onClose();
+      }
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || "Error submitting application"
+      );
     }
   };
 
@@ -169,10 +200,11 @@ const ApplicationForm = ({ job, onClose }) => {
   }
 
   const currentQuestion =
-    job?.screeningQuestions?.[formState.currentQuestionIndex];
-  const currentResponse = formState.responses[
-    formState.currentQuestionIndex
-  ] || { response: "", isValid: true };
+    job?.screeningQuestions?.[formData.currentQuestionIndex];
+  const currentResponse = formData.responses[formData.currentQuestionIndex] || {
+    response: "",
+    isValid: true,
+  };
 
   const renderQuestionInput = (question, response) => {
     if (!question) return null;
@@ -261,141 +293,75 @@ const ApplicationForm = ({ job, onClose }) => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Resume Selection */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Resume *
-              </label>
-              {resumesLoading ? (
-                <div className="flex items-center justify-center p-4">
-                  <Loader size="sm" />
-                </div>
-              ) : resumes?.length > 0 ? (
-                <select
-                  value={formState.selectedResume}
-                  onChange={(e) => handleResumeSelect(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  required
-                  disabled={submitLoading}
-                >
-                  <option value="">Choose a resume...</option>
-                  {resumes.map((resume) => (
-                    <option key={resume._id} value={resume._id}>
-                      {resume.title || "Untitled Resume"} (
-                      {new Date(resume.updatedAt).toLocaleDateString()})
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <p className="text-gray-600 mb-2">No resumes found</p>
-                  <button
-                    type="button"
-                    onClick={() => navigate("/resume/upload")}
-                    className="text-primary-600 hover:text-primary-700 font-medium"
+            {step === 1 ? (
+              // Resume selection
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Resume *
+                </label>
+                {resumesLoading ? (
+                  <div className="flex items-center justify-center p-4">
+                    <Loader size="sm" />
+                  </div>
+                ) : resumes?.length > 0 ? (
+                  <select
+                    value={formData.selectedResume}
+                    onChange={(e) => handleResumeSelect(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    required
                     disabled={submitLoading}
                   >
-                    Upload Resume
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Screening Questions */}
-            {currentQuestion && (
-              <div className="border-t border-gray-200 pt-6">
-                <div className="mb-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="text-lg font-semibold">
-                      Screening Questions
-                      <span className="text-sm text-gray-500 ml-2">
-                        {formState.currentQuestionIndex + 1} of{" "}
-                        {job.screeningQuestions?.length || 0}
-                      </span>
-                    </h3>
-                    <div className="text-sm text-gray-500">
-                      {Math.round(
-                        ((formState.currentQuestionIndex + 1) /
-                          (job.screeningQuestions?.length || 1)) *
-                          100
-                      )}
-                      % Complete
-                    </div>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-1">
-                    <div
-                      className="bg-primary-600 h-1 rounded-full transition-all duration-300"
-                      style={{
-                        width: `${
-                          ((formState.currentQuestionIndex + 1) /
-                            (job.screeningQuestions?.length || 1)) *
-                          100
-                        }%`,
-                      }}
-                    ></div>
-                  </div>
-                </div>
-
-                <div
-                  key={formState.currentQuestionIndex}
-                  className="space-y-4 animate-fadeIn"
-                >
-                  <div className="mb-2 flex items-start">
-                    <span className="text-gray-800 font-medium">
-                      {currentQuestion.question}
-                    </span>
-                    {currentQuestion.required && (
-                      <span className="text-red-500 ml-1">*</span>
-                    )}
-                  </div>
-
-                  {renderQuestionInput(currentQuestion, currentResponse)}
-
-                  <div className="flex justify-between mt-6">
+                    <option value="">Choose a resume...</option>
+                    {resumes.map((resume) => (
+                      <option key={resume._id} value={resume._id}>
+                        {resume.title || "Untitled Resume"} (
+                        {new Date(resume.updatedAt).toLocaleDateString()})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <p className="text-gray-600 mb-2">No resumes found</p>
                     <button
                       type="button"
-                      onClick={handleBack}
-                      className="btn btn-secondary"
-                      disabled={
-                        formState.currentQuestionIndex === 0 || submitLoading
-                      }
+                      onClick={() => navigate("/resume/upload")}
+                      className="text-primary-600 hover:text-primary-700 font-medium"
+                      disabled={submitLoading}
                     >
-                      <FontAwesomeIcon icon="arrow-left" className="mr-2" />
-                      Back
+                      Upload Resume
                     </button>
-
-                    {formState.currentQuestionIndex ===
-                    (job.screeningQuestions?.length || 0) - 1 ? (
-                      <button
-                        type="submit"
-                        className="btn btn-primary"
-                        disabled={submitLoading || !formState.isFormValid}
-                      >
-                        {submitLoading ? (
-                          <Loader size="sm" />
-                        ) : (
-                          <>
-                            <FontAwesomeIcon
-                              icon="paper-plane"
-                              className="mr-2"
-                            />
-                            Submit Application
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleNext}
-                        className="btn btn-primary"
-                        disabled={!currentResponse.isValid || submitLoading}
-                      >
-                        Next
-                        <FontAwesomeIcon icon="arrow-right" className="ml-2" />
-                      </button>
-                    )}
                   </div>
-                </div>
+                )}
+              </div>
+            ) : (
+              // Chatbot screening
+              <div>
+                <h3 className="text-lg font-semibold mb-4">
+                  Screening Questions
+                </h3>
+                {job.screeningQuestions?.length > 0 ? (
+                  <ChatbotAssistant
+                    questions={job.screeningQuestions}
+                    onComplete={handleChatbotComplete}
+                    onAnalysisComplete={(responses) =>
+                      handleChatbotComplete(responses)
+                    }
+                    jobTitle={job.title}
+                  />
+                ) : (
+                  <p>No screening questions for this position.</p>
+                )}
+
+                {formData.chatbotComplete && (
+                  <div className="mt-6">
+                    <button
+                      onClick={handleSubmit}
+                      className="w-full bg-primary-600 text-white py-2 px-4 rounded-lg hover:bg-primary-700 transition-colors"
+                    >
+                      Submit Application
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </form>

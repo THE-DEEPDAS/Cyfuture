@@ -25,6 +25,17 @@ export const applyToJob = asyncHandler(async (req, res) => {
 
   // Find job and check if it exists and is active
   const job = await Job.findById(jobId).populate("company");
+
+  // Check screening questions
+  if (job.screeningQuestions?.length > 0) {
+    if (
+      !screeningResponses ||
+      screeningResponses.length !== job.screeningQuestions.length
+    ) {
+      res.status(400);
+      throw new Error("Please answer all screening questions");
+    }
+  }
   if (!job) {
     res.status(404);
     throw new Error("Job not found");
@@ -57,6 +68,18 @@ export const applyToJob = asyncHandler(async (req, res) => {
     throw new Error("Resume not found");
   }
 
+  // Get match score and analysis
+  const matchScore = await calculateMatchScore(job, resume.parsedData);
+  let llmAnalysis = null;
+
+  if (job.llmEvaluation?.enabled) {
+    llmAnalysis = await analyzeCandidate(
+      resume.parsedData,
+      job,
+      screeningResponses
+    );
+  }
+
   // Create application
   const application = await Application.create({
     job: jobId,
@@ -65,19 +88,60 @@ export const applyToJob = asyncHandler(async (req, res) => {
     coverLetter,
     screeningResponses,
     status: "pending",
+    matchScore,
+    llmAnalysis,
   });
 
-  // Notify company about new application
-  await createNotification({
-    user: job.company._id,
-    type: "NEW_APPLICATION",
-    title: "New Job Application",
-    message: `${req.user.name} has applied for ${job.title}`,
-    reference: {
-      type: "Application",
-      id: application._id,
-    },
-  });
+  // Send application notification
+  const sendApplicationNotification = async (application, job, analysis) => {
+    // Notify company about new application
+    await notifyUser(
+      job.company._id,
+      "APPLICATION_RECEIVED",
+      "New Job Application",
+      `${application.candidate.name} has applied for ${job.title}`,
+      {
+        jobId: job._id,
+        applicationId: application._id,
+        candidateId: application.candidate._id,
+        score: analysis?.score || null,
+      }
+    );
+
+    // Notify candidate about application status
+    if (!analysis?.isRecommended) {
+      await notifyUser(
+        application.candidate._id,
+        "APPLICATION_FEEDBACK",
+        "Application Status Update",
+        `Thank you for applying to ${
+          job.title
+        }. Based on our initial assessment, we regret to inform you that your profile may not be the best match for this role at this time. ${
+          analysis.analysis.feedback || ""
+        }`,
+        {
+          jobId: job._id,
+          applicationId: application._id,
+          status: "rejected",
+          feedback: analysis.analysis.improvements || [],
+        }
+      );
+    } else {
+      await notifyUser(
+        application.candidate._id,
+        "APPLICATION_RECEIVED",
+        "Application Received",
+        `Your application for ${job.title} has been received and is under review.`,
+        {
+          jobId: job._id,
+          applicationId: application._id,
+          status: "reviewing",
+        }
+      );
+    }
+  };
+
+  await sendApplicationNotification(application, job, llmAnalysis);
 
   res.status(201).json(application);
 });
@@ -86,19 +150,45 @@ export const applyToJob = asyncHandler(async (req, res) => {
 // @route   GET /api/applications/candidate
 // @access  Private/Candidate
 export const getCandidateApplications = asyncHandler(async (req, res) => {
-  const applications = await Application.find({ candidate: req.user._id })
-    .populate({
-      path: "job",
-      select: "title company location type",
-      populate: {
-        path: "company",
-        select: "companyName",
-      },
-    })
-    .select("status matchScore createdAt messages")
-    .sort({ createdAt: -1 });
+  try {
+    // Make sure we have a valid user ID
+    if (!req.user?._id) {
+      res.status(401);
+      throw new Error("User not authenticated");
+    }
 
-  res.json(applications);
+    const applications = await Application.find({ candidate: req.user._id })
+      .populate({
+        path: "job",
+        select: "title company location type status",
+        populate: {
+          path: "company",
+          select: "companyName",
+        },
+      })
+      .populate("resume", "fileUrl parsedData")
+      .select(
+        "status matchScore createdAt messages screeningResponses coverLetter llmAnalysis"
+      )
+      .sort({ createdAt: -1 })
+      .lean(); // Convert to plain JS objects for better performance
+
+    // If no applications found, return empty array instead of error
+    if (!applications) {
+      return res.json([]);
+    }
+
+    // Filter out any applications with missing job or company info
+    const validApplications = applications.filter(
+      (app) => app && app.job && app.job.company && app.job.title
+    );
+
+    res.json(validApplications);
+  } catch (error) {
+    console.error("Error in getCandidateApplications:", error);
+    res.status(500);
+    throw new Error(error.message || "Failed to fetch applications");
+  }
 });
 
 // @desc    Get all applications for a company
@@ -311,15 +401,23 @@ export const updateApplicationStatus = asyncHandler(async (req, res) => {
   const updatedApplication = await application.save();
 
   // Create status-specific notification messages
+  let notificationType = "status"; // default type
   let notificationTitle = "Application Status Updated";
   let notificationMessage = `Your application for ${application.job.title} has been updated to: ${status}`;
 
+  // For shortlisted status, we'll use "application" type since shortlisted is a valid application status
   if (status === "shortlisted") {
+    notificationType = "application";
     notificationTitle = "Congratulations! You've Been Shortlisted";
     notificationMessage = `Great news! Your application for ${application.job.title} has been shortlisted. The employer may contact you soon for the next steps.`;
   } else if (status === "rejected") {
+    notificationType = "APPLICATION_REJECTED";
     notificationTitle = "Application Status Update";
     notificationMessage = `We regret to inform you that your application for ${application.job.title} has not been selected to move forward.`;
+  } else if (status === "accepted") {
+    notificationType = "APPLICATION_ACCEPTED";
+    notificationTitle = "Congratulations! Application Accepted";
+    notificationMessage = `Great news! Your application for ${application.job.title} has been accepted.`;
   } else if (status === "hired") {
     notificationTitle = "Congratulations! You've Been Hired";
     notificationMessage = `Excellent news! Your application for ${application.job.title} has been successful. The employer will contact you with further details.`;
@@ -328,7 +426,7 @@ export const updateApplicationStatus = asyncHandler(async (req, res) => {
   await notifyUser(
     io,
     application.candidate.toString(),
-    "status",
+    notificationType,
     notificationTitle,
     notificationMessage,
     {
@@ -525,7 +623,7 @@ export const toggleShortlist = asyncHandler(async (req, res) => {
     await notifyUser(application.candidate._id, {
       title: "Application Shortlisted",
       message: `Your application for ${application.job.title} has been shortlisted!`,
-      type: "application_shortlisted",
+      type: "application", // Using valid type for shortlist notifications
       link: `/applications/${application._id}`,
     });
   }
@@ -596,7 +694,7 @@ export const shortlistCandidate = asyncHandler(async (req, res) => {
   // Send notification to candidate
   await createNotification({
     user: application.candidate,
-    type: "APPLICATION_SHORTLISTED",
+    type: "application", // Using valid type for shortlist notifications
     title: "Application Shortlisted",
     message: `Your application for ${job.title} has been shortlisted!`,
     reference: {
@@ -716,4 +814,157 @@ export const getMatchingScores = asyncHandler(async (req, res) => {
   }
 
   res.json({ scores });
+});
+
+/**
+ * @desc    Accept an application
+ * @route   PUT /api/applications/:id/accept
+ * @access  Private/Company
+ */
+export const acceptApplication = asyncHandler(async (req, res) => {
+  const application = await Application.findById(req.params.id).populate({
+    path: "job",
+    select: "company title",
+  });
+
+  if (!application) {
+    res.status(404);
+    throw new Error("Application not found");
+  }
+
+  // Check if the user is the company that posted the job
+  if (application.job.company.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Not authorized to accept this application");
+  }
+
+  // Update the status to accepted
+  application.status = "accepted";
+
+  // Add a system message about the status change
+  application.messages.push({
+    sender: "system",
+    content: "Application has been accepted",
+    language: "en",
+    createdAt: new Date(),
+  });
+
+  const updatedApplication = await application.save();
+
+  // Send notification to candidate
+  await notifyUser(
+    application.candidate.toString(),
+    "APPLICATION_ACCEPTED",
+    "Congratulations! Application Accepted",
+    `Great news! Your application for ${application.job.title} has been accepted.`,
+    {
+      applicationId: application._id.toString(),
+      jobId: application.job._id.toString(),
+      status: "accepted",
+    }
+  );
+
+  res.json(updatedApplication);
+});
+
+/**
+ * @desc    Hire a candidate
+ * @route   PUT /api/applications/:id/hire
+ * @access  Private/Company
+ */
+export const hireCandidate = asyncHandler(async (req, res) => {
+  const application = await Application.findById(req.params.id).populate({
+    path: "job",
+    select: "company title",
+  });
+
+  if (!application) {
+    res.status(404);
+    throw new Error("Application not found");
+  }
+
+  // Check if the user is the company that posted the job
+  if (application.job.company.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Not authorized to hire for this job");
+  }
+
+  // Update the status to hired
+  application.status = "hired";
+
+  // Add a system message about the status change
+  application.messages.push({
+    sender: "system",
+    content: "Congratulations! You have been hired for this position.",
+    language: "en",
+    createdAt: new Date(),
+  });
+
+  const updatedApplication = await application.save();
+
+  // Send notification to candidate
+  await notifyUser(
+    application.candidate.toString(),
+    "status",
+    "Congratulations! You've Been Hired",
+    `Excellent news! Your application for ${application.job.title} has been successful. The employer will contact you with further details.`,
+    {
+      applicationId: application._id.toString(),
+      jobId: application.job._id.toString(),
+      status: "hired",
+    }
+  );
+
+  res.json(updatedApplication);
+});
+
+/**
+ * @desc    Reject an application
+ * @route   PUT /api/applications/:id/reject
+ * @access  Private/Company
+ */
+export const rejectApplication = asyncHandler(async (req, res) => {
+  const application = await Application.findById(req.params.id).populate({
+    path: "job",
+    select: "company title",
+  });
+
+  if (!application) {
+    res.status(404);
+    throw new Error("Application not found");
+  }
+
+  // Check if the user is the company that posted the job
+  if (application.job.company.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Not authorized to reject this application");
+  }
+
+  // Update the status to rejected
+  application.status = "rejected";
+
+  // Add a system message about the status change
+  application.messages.push({
+    sender: "system",
+    content: "Application has been rejected",
+    language: "en",
+    createdAt: new Date(),
+  });
+
+  const updatedApplication = await application.save();
+
+  // Send notification to candidate
+  await notifyUser(
+    application.candidate.toString(),
+    "APPLICATION_REJECTED",
+    "Application Status Update",
+    `We regret to inform you that your application for ${application.job.title} has not been selected to move forward.`,
+    {
+      applicationId: application._id.toString(),
+      jobId: application.job._id.toString(),
+      status: "rejected",
+    }
+  );
+
+  res.json(updatedApplication);
 });

@@ -4,7 +4,7 @@ export const getCandidateResumes = () => async (dispatch) => {
   try {
     dispatch({ type: "CANDIDATE_RESUMES_REQUEST" });
 
-    const { data } = await api.get("/api/resumes");
+    const { data } = await api.get("/resumes");
 
     dispatch({
       type: "CANDIDATE_RESUMES_SUCCESS",
