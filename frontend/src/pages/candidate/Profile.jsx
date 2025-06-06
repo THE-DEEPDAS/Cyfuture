@@ -1,0 +1,535 @@
+import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import api from "../../utils/api.js";
+
+const Profile = () => {
+  const [profileData, setProfileData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [editMode, setEditMode] = useState({
+    skills: false,
+    experience: false,
+    projects: false,
+  });
+  const [newItem, setNewItem] = useState({
+    skill: "",
+    experience: {
+      title: "",
+      company: "",
+      location: "",
+      startDate: "",
+      endDate: "",
+      description: "",
+    },
+    project: {
+      name: "",
+      description: "",
+      technologies: [],
+      url: "",
+    },
+  });
+
+  useEffect(() => {
+    fetchProfileData();
+  }, []);
+  const fetchProfileData = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get("/resumes/default");
+      setProfileData(response.data);
+      setLoading(false);
+    } catch (err) {
+      console.error("Error fetching profile data:", err);
+      setError("Failed to load profile data");
+      setLoading(false);
+    }
+  };
+
+  const handleAddSkill = async () => {
+    try {
+      await api.post("/resumes/skills", { skill: newItem.skill });
+      setNewItem({ ...newItem, skill: "" });
+      fetchProfileData();
+    } catch (err) {
+      setError("Failed to add skill");
+    }
+  };
+
+  const handleDeleteSkill = async (skillToDelete) => {
+    try {
+      await api.delete("/resumes/skills", { data: { skill: skillToDelete } });
+      fetchProfileData();
+    } catch (err) {
+      setError("Failed to delete skill");
+    }
+  };
+
+  const handleAddExperience = async () => {
+    try {
+      await api.post("/resumes/experience", newItem.experience);
+      setNewItem({
+        ...newItem,
+        experience: {
+          title: "",
+          company: "",
+          location: "",
+          startDate: "",
+          endDate: "",
+          description: "",
+        },
+      });
+      setEditMode({ ...editMode, experience: false });
+      fetchProfileData();
+    } catch (err) {
+      setError("Failed to add experience");
+    }
+  };
+  const handleDeleteExperience = async (expId) => {
+    try {
+      await api.delete(`/resumes/experience/${expId}`);
+      fetchProfileData();
+    } catch (err) {
+      setError("Failed to delete experience");
+    }
+  };
+  const handleAddProject = async () => {
+    try {
+      await api.post("/resumes/projects", newItem.project);
+      setNewItem({
+        ...newItem,
+        project: {
+          name: "",
+          description: "",
+          technologies: [],
+          url: "",
+        },
+      });
+      setEditMode({ ...editMode, projects: false });
+      fetchProfileData();
+    } catch (err) {
+      setError("Failed to add project");
+    }
+  };
+  const handleDeleteProject = async (projectId) => {
+    try {
+      await api.delete(`/resumes/projects/${projectId}`);
+      fetchProfileData();
+    } catch (err) {
+      setError("Failed to delete project");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen-content">
+        <div className="text-center">
+          <FontAwesomeIcon
+            icon="spinner"
+            spin
+            className="text-4xl text-primary-500 mb-4"
+          />
+          <p className="text-gray-300">Loading profile data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8 max-w-4xl mx-auto p-6">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-primary-900 to-background-secondary rounded-lg p-6 shadow-custom-dark">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-white mb-2">My Profile</h1>
+            <p className="text-gray-300">
+              Manage your professional information
+            </p>
+          </div>
+          <Link to="/candidate/resume" className="btn-secondary">
+            <FontAwesomeIcon icon="file-alt" className="mr-2" />
+            Resume Manager
+          </Link>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-error-100 border border-error-300 text-error-700 px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
+
+      {/* Skills Section */}
+      <div className="card">
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center">
+            <FontAwesomeIcon icon="tools" className="text-primary-500 mr-3" />
+            <h2 className="text-xl font-semibold text-white">Skills</h2>
+          </div>
+          <button
+            onClick={() =>
+              setEditMode({ ...editMode, skills: !editMode.skills })
+            }
+            className="btn-secondary"
+          >
+            <FontAwesomeIcon
+              icon={editMode.skills ? "times" : "plus"}
+              className="mr-2"
+            />
+            {editMode.skills ? "Cancel" : "Add Skill"}
+          </button>
+        </div>
+
+        {editMode.skills && (
+          <div className="mb-6 p-4 bg-background-secondary rounded-lg">
+            <div className="flex gap-4">
+              <input
+                type="text"
+                value={newItem.skill}
+                onChange={(e) =>
+                  setNewItem({ ...newItem, skill: e.target.value })
+                }
+                placeholder="Enter skill"
+                className="flex-1 bg-background-light text-white px-4 py-2 rounded border border-gray-700"
+              />
+              <button onClick={handleAddSkill} className="btn-primary">
+                Add
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          {profileData?.parsedData?.skills?.map((skill, index) => (
+            <div
+              key={index}
+              className="group px-3 py-1 rounded-full bg-primary-900/30 text-primary-300 border border-primary-700/50 flex items-center"
+            >
+              {skill}
+              {editMode.skills && (
+                <button
+                  onClick={() => handleDeleteSkill(skill)}
+                  className="ml-2 text-error-500 hover:text-error-400 transition-colors"
+                >
+                  <FontAwesomeIcon icon="times" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Experience Section */}
+      <div className="card">
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center">
+            <FontAwesomeIcon
+              icon="briefcase"
+              className="text-primary-500 mr-3"
+            />
+            <h2 className="text-xl font-semibold text-white">Experience</h2>
+          </div>
+          <button
+            onClick={() =>
+              setEditMode({ ...editMode, experience: !editMode.experience })
+            }
+            className="btn-secondary"
+          >
+            <FontAwesomeIcon
+              icon={editMode.experience ? "times" : "plus"}
+              className="mr-2"
+            />
+            {editMode.experience ? "Cancel" : "Add Experience"}
+          </button>
+        </div>
+
+        {editMode.experience && (
+          <div className="mb-6 p-4 bg-background-secondary rounded-lg">
+            <div className="space-y-4">
+              <input
+                type="text"
+                value={newItem.experience.title}
+                onChange={(e) =>
+                  setNewItem({
+                    ...newItem,
+                    experience: {
+                      ...newItem.experience,
+                      title: e.target.value,
+                    },
+                  })
+                }
+                placeholder="Job Title"
+                className="w-full bg-background-light text-white px-4 py-2 rounded border border-gray-700"
+              />
+              <input
+                type="text"
+                value={newItem.experience.company}
+                onChange={(e) =>
+                  setNewItem({
+                    ...newItem,
+                    experience: {
+                      ...newItem.experience,
+                      company: e.target.value,
+                    },
+                  })
+                }
+                placeholder="Company"
+                className="w-full bg-background-light text-white px-4 py-2 rounded border border-gray-700"
+              />
+              <input
+                type="text"
+                value={newItem.experience.location}
+                onChange={(e) =>
+                  setNewItem({
+                    ...newItem,
+                    experience: {
+                      ...newItem.experience,
+                      location: e.target.value,
+                    },
+                  })
+                }
+                placeholder="Location"
+                className="w-full bg-background-light text-white px-4 py-2 rounded border border-gray-700"
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <input
+                  type="date"
+                  value={newItem.experience.startDate}
+                  onChange={(e) =>
+                    setNewItem({
+                      ...newItem,
+                      experience: {
+                        ...newItem.experience,
+                        startDate: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="Start Date"
+                  className="w-full bg-background-light text-white px-4 py-2 rounded border border-gray-700"
+                />
+                <input
+                  type="date"
+                  value={newItem.experience.endDate}
+                  onChange={(e) =>
+                    setNewItem({
+                      ...newItem,
+                      experience: {
+                        ...newItem.experience,
+                        endDate: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="End Date"
+                  className="w-full bg-background-light text-white px-4 py-2 rounded border border-gray-700"
+                />
+              </div>
+              <textarea
+                value={newItem.experience.description}
+                onChange={(e) =>
+                  setNewItem({
+                    ...newItem,
+                    experience: {
+                      ...newItem.experience,
+                      description: e.target.value,
+                    },
+                  })
+                }
+                placeholder="Description"
+                rows={4}
+                className="w-full bg-background-light text-white px-4 py-2 rounded border border-gray-700"
+              />
+              <button
+                onClick={handleAddExperience}
+                className="btn-primary w-full"
+              >
+                Add Experience
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-6">
+          {profileData?.parsedData?.experience?.map((exp, index) => (
+            <div
+              key={index}
+              className="group border-l-2 border-primary-700 pl-4 pb-6 last:pb-0 relative"
+            >
+              {editMode.experience && (
+                <button
+                  onClick={() => handleDeleteExperience(exp._id)}
+                  className="absolute top-0 right-0 text-error-500 hover:text-error-400 transition-colors"
+                >
+                  <FontAwesomeIcon icon="trash-alt" />
+                </button>
+              )}
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-lg font-medium text-white">
+                    {exp.title}
+                  </h3>
+                  <p className="text-primary-300">
+                    {exp.company}
+                    {exp.location && ` • ${exp.location}`}
+                  </p>
+                </div>
+                <span className="text-sm text-gray-400">
+                  {new Date(exp.startDate).toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "short",
+                  })}{" "}
+                  -{" "}
+                  {exp.endDate
+                    ? new Date(exp.endDate).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                      })
+                    : "Present"}
+                </span>
+              </div>
+              {exp.description && (
+                <p className="text-gray-300 mt-2">{exp.description}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Projects Section */}
+      <div className="card">
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center">
+            <FontAwesomeIcon icon="code" className="text-primary-500 mr-3" />
+            <h2 className="text-xl font-semibold text-white">Projects</h2>
+          </div>
+          <button
+            onClick={() =>
+              setEditMode({ ...editMode, projects: !editMode.projects })
+            }
+            className="btn-secondary"
+          >
+            <FontAwesomeIcon
+              icon={editMode.projects ? "times" : "plus"}
+              className="mr-2"
+            />
+            {editMode.projects ? "Cancel" : "Add Project"}
+          </button>
+        </div>
+
+        {editMode.projects && (
+          <div className="mb-6 p-4 bg-background-secondary rounded-lg">
+            <div className="space-y-4">
+              <input
+                type="text"
+                value={newItem.project.name}
+                onChange={(e) =>
+                  setNewItem({
+                    ...newItem,
+                    project: { ...newItem.project, name: e.target.value },
+                  })
+                }
+                placeholder="Project Name"
+                className="w-full bg-background-light text-white px-4 py-2 rounded border border-gray-700"
+              />
+              <textarea
+                value={newItem.project.description}
+                onChange={(e) =>
+                  setNewItem({
+                    ...newItem,
+                    project: {
+                      ...newItem.project,
+                      description: e.target.value,
+                    },
+                  })
+                }
+                placeholder="Description"
+                rows={4}
+                className="w-full bg-background-light text-white px-4 py-2 rounded border border-gray-700"
+              />
+              <input
+                type="text"
+                value={newItem.project.technologies.join(", ")}
+                onChange={(e) =>
+                  setNewItem({
+                    ...newItem,
+                    project: {
+                      ...newItem.project,
+                      technologies: e.target.value
+                        .split(",")
+                        .map((t) => t.trim()),
+                    },
+                  })
+                }
+                placeholder="Technologies (comma-separated)"
+                className="w-full bg-background-light text-white px-4 py-2 rounded border border-gray-700"
+              />
+              <input
+                type="url"
+                value={newItem.project.url}
+                onChange={(e) =>
+                  setNewItem({
+                    ...newItem,
+                    project: { ...newItem.project, url: e.target.value },
+                  })
+                }
+                placeholder="Project URL"
+                className="w-full bg-background-light text-white px-4 py-2 rounded border border-gray-700"
+              />
+              <button onClick={handleAddProject} className="btn-primary w-full">
+                Add Project
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-6">
+          {profileData?.parsedData?.projects?.map((project, index) => (
+            <div
+              key={index}
+              className="group bg-background-secondary rounded-lg p-4 relative"
+            >
+              {editMode.projects && (
+                <button
+                  onClick={() => handleDeleteProject(project._id)}
+                  className="absolute top-4 right-4 text-error-500 hover:text-error-400 transition-colors"
+                >
+                  <FontAwesomeIcon icon="trash-alt" />
+                </button>
+              )}
+              <h3 className="text-lg font-medium text-white mb-2">
+                {project.name}
+              </h3>
+              {project.description && (
+                <p className="text-gray-300 mb-3">{project.description}</p>
+              )}
+              {project.technologies?.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {project.technologies.map((tech, techIndex) => (
+                    <span
+                      key={techIndex}
+                      className="px-2 py-0.5 text-xs rounded-full bg-primary-800/30 text-primary-300"
+                    >
+                      {tech}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {project.url && project.url !== "GitHub" && (
+                <a
+                  href={project.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-primary-400 hover:text-primary-300 transition-colors"
+                >
+                  <FontAwesomeIcon icon="external-link-alt" className="mr-1" />
+                  View Project
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Profile;

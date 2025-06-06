@@ -36,6 +36,7 @@ import CompanyMessages from "./pages/company/Messages.jsx";
 import CompanyAnalytics from "./pages/company/Analytics.jsx";
 import CandidateAnalysis from "./pages/company/CandidateAnalysis.jsx";
 import NotFoundPage from "./pages/NotFoundPage.jsx";
+import Profile from "./pages/candidate/Profile.jsx";
 
 // Add FontAwesome icons to library
 library.add(fas, far, fab);
@@ -54,29 +55,23 @@ function App() {
             </Route>
 
             {/* Candidate routes */}
-            <Route element={<ProtectedRoute role="candidate" />}>
+            <Route
+              path="/candidate"
+              element={<ProtectedRoute role="candidate" />}
+            >
               <Route element={<DashboardLayout type="candidate" />}>
-                <Route path="/candidate" element={<CandidateDashboard />} />
-                <Route path="/candidate/jobs" element={<JobSearch />} />
-                <Route path="/candidate/resume" element={<ResumeManager />} />
+                <Route index element={<CandidateDashboard />} />
+                <Route path="profile" element={<Profile />} />
+                <Route path="resume" element={<ResumeManager />} />
+                <Route path="resume-profile" element={<ResumeProfile />} />
                 <Route
-                  path="/candidate/resume-profile"
+                  path="resume-profile/:resumeId"
                   element={<ResumeProfile />}
                 />
+                <Route path="messages" element={<CandidateMessages />} />
+                <Route path="jobs/:jobId/apply" element={<ApplicationForm />} />
                 <Route
-                  path="/candidate/resume-profile/:resumeId"
-                  element={<ResumeProfile />}
-                />
-                <Route
-                  path="/candidate/messages"
-                  element={<CandidateMessages />}
-                />
-                <Route
-                  path="/candidate/jobs/:jobId/apply"
-                  element={<ApplicationForm />}
-                />
-                <Route
-                  path="/candidate/applications/:id"
+                  path="applications/:id"
                   element={<ApplicationDetail />}
                 />
               </Route>

@@ -16,9 +16,6 @@ import "./index.css";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import api from "./utils/api.js";
 
-// Set the default axios instance to our custom one
-axios.defaults.baseURL = import.meta.env.VITE_API_URL;
-
 // Set up axios interceptors globally
 axios.interceptors.request.use(
   (config) => {

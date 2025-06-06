@@ -6,6 +6,7 @@ import {
   getResume,
   deleteResume,
   setDefaultResume,
+  getDefaultResume,
 } from "../controllers/resumeController.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { upload } from "../config/cloudinaryConfig.js";
@@ -20,6 +21,7 @@ router.post(
   multerErrorHandler,
   uploadResume
 );
+router.get("/default", protect, getDefaultResume); // This needs to be before the :id route
 router.get("/", protect, getResumes);
 router.get("/:id", protect, getResume);
 router.delete("/:id", protect, deleteResume);

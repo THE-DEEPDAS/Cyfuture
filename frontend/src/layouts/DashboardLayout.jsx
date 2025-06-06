@@ -137,12 +137,21 @@ const DashboardLayout = ({ type }) => {
                 />
               </div>
               <div className="ml-3">
-                <p className="text-sm font-medium text-white">
-                  {user?.name || "User"}
-                </p>
-                <p className="text-xs text-gray-400">
-                  {user?.email || "user@example.com"}
-                </p>
+                <Link
+                  to={
+                    type === "candidate"
+                      ? "/candidate/profile"
+                      : "/company/profile"
+                  }
+                  className="block hover:text-primary-400 transition-colors"
+                >
+                  <p className="text-sm font-medium text-white hover:text-primary-400">
+                    {user?.name || "User"}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {user?.email || "user@example.com"}
+                  </p>
+                </Link>
               </div>
             </div>
             <button
@@ -190,14 +199,23 @@ const DashboardLayout = ({ type }) => {
                   <FontAwesomeIcon
                     icon={type === "candidate" ? "user" : "building"}
                   />
-                </div>
+                </div>{" "}
                 <div className="ml-3">
-                  <p className="text-sm font-medium text-white">
-                    {user?.name || "User"}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    {user?.email || "user@example.com"}
-                  </p>
+                  <Link
+                    to={
+                      type === "candidate"
+                        ? "/candidate/profile"
+                        : "/company/profile"
+                    }
+                    className="block hover:text-primary-400 transition-colors"
+                  >
+                    <p className="text-sm font-medium text-white hover:text-primary-400">
+                      {user?.name || "User"}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {user?.email || "user@example.com"}
+                    </p>
+                  </Link>
                 </div>
               </div>
               <button

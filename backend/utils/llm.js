@@ -325,27 +325,37 @@ REQUIREMENTS:
 
     try {
       const result = await getLLMResponse(prompt);
-      
+
       // Extract JSON from the response by finding the first { and last }
-      const jsonStart = result.indexOf('{');
-      const jsonEnd = result.lastIndexOf('}') + 1;
+      const jsonStart = result.indexOf("{");
+      const jsonEnd = result.lastIndexOf("}") + 1;
       const jsonStr = result.slice(jsonStart, jsonEnd);
-      
+
       try {
         const evaluation = JSON.parse(jsonStr);
-        
+
         // Validate required fields
-        const requiredFields = ['score', 'feedback', 'confidence', 'flags', 'strengths'];
-        const missingFields = requiredFields.filter(field => !(field in evaluation));
-        
+        const requiredFields = [
+          "score",
+          "feedback",
+          "confidence",
+          "flags",
+          "strengths",
+        ];
+        const missingFields = requiredFields.filter(
+          (field) => !(field in evaluation)
+        );
+
         if (missingFields.length > 0) {
-          throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+          throw new Error(
+            `Missing required fields: ${missingFields.join(", ")}`
+          );
         }
-        
+
         // Ensure score and confidence are in valid ranges
         evaluation.score = Math.max(0, Math.min(100, evaluation.score));
         evaluation.confidence = Math.max(0, Math.min(1, evaluation.confidence));
-        
+
         results.push({
           questionId: question._id,
           evaluation: {
@@ -357,10 +367,10 @@ REQUIREMENTS:
           },
         });
       } catch (parseError) {
-        console.error('JSON Parse Error:', parseError);
-        console.error('Raw Response:', result);
-        console.error('Attempted JSON:', jsonStr);
-        throw new Error('Failed to parse LLM response as JSON');
+        console.error("JSON Parse Error:", parseError);
+        console.error("Raw Response:", result);
+        console.error("Attempted JSON:", jsonStr);
+        throw new Error("Failed to parse LLM response as JSON");
       }
     } catch (error) {
       console.error(

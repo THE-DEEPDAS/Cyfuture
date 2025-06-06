@@ -1,12 +1,12 @@
 /**
  * LLM-based Resume Extractor
- * 
+ *
  * This module uses an LLM to extract structured information from resume text.
- * It passes the raw resume text to an LLM and asks it to return skills, 
+ * It passes the raw resume text to an LLM and asks it to return skills,
  * experience, and projects as JSON objects.
  */
 
-import { getLLMResponse } from '../utils/llm.js';
+import { getLLMResponse } from "../utils/llm.js";
 
 /**
  * Extract structured information from resume text using an LLM
@@ -16,7 +16,7 @@ import { getLLMResponse } from '../utils/llm.js';
 async function extractResumeDataWithLLM(resumeText) {
   try {
     console.log("Starting LLM-based resume extraction");
-    
+
     // Define the prompt for the LLM
     const prompt = `You are a resume parsing assistant that must output ONLY valid JSON.
 STRICT REQUIREMENTS:
@@ -25,28 +25,26 @@ STRICT REQUIREMENTS:
 - Do not include any explanations
 - All fields must be present in the output
 - Each skill should be 1-3 words maximum
-- Try to extract as many skills as possible
 
-Parse the following resume text and output a JSON object with exactly this structure:
+Parse the following resume text and output EXACTLY this JSON structure:
 {
-  "skills": [
-    "skill1",
-    "skill2"
-  ],
+  "skills": ["skill1", "skill2"],
   "experience": [
     {
-      "title": "exact job title",
-      "company": "company name",
-      "startDate": "YYYY-MM or YYYY",
-      "endDate": "YYYY-MM or YYYY or null if current",
-      "description": "role description"
+      "title": "Software Engineer",
+      "company": "Company Name",
+      "location": "City, State",
+      "startDate": "YYYY-MM",
+      "endDate": "YYYY-MM or null if current",
+      "description": "Job description"
     }
   ],
   "projects": [
     {
-      "name": "project name",
+      "name": "Project Name",
+      "description": "Project description",
       "technologies": ["tech1", "tech2"],
-      "description": "project description"
+      "url": "project url or empty string"
     }
   ]
 }
@@ -56,7 +54,8 @@ ${resumeText}`;
 
     // Call the LLM with the prompt
     const llmResponse = await getLLMResponse(prompt);
-    
+    console.log("Raw LLM Response:", llmResponse);
+
     // Extract JSON from the response
     const jsonMatch = llmResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
@@ -66,34 +65,53 @@ ${resumeText}`;
 
     try {
       const parsedData = JSON.parse(jsonMatch[0]);
-      
-      // Validate required fields
-      const requiredFields = ['skills', 'experience', 'projects'];
-      const missingFields = requiredFields.filter(field => !(field in parsedData));
-      
-      if (missingFields.length > 0) {
-        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
-      }
-      
-      // Validate data types
-      if (!Array.isArray(parsedData.skills)) throw new Error('Skills must be an array');
-      if (!Array.isArray(parsedData.experience)) throw new Error('Experience must be an array');
-      if (!Array.isArray(parsedData.projects)) throw new Error('Projects must be an array');
 
-      console.log("Successfully extracted resume data using LLM");
+      // Strict validation of structure
+      if (!Array.isArray(parsedData.skills)) {
+        throw new Error("Skills must be an array");
+      }
+      if (!Array.isArray(parsedData.experience)) {
+        throw new Error("Experience must be an array");
+      }
+      if (!Array.isArray(parsedData.projects)) {
+        throw new Error("Projects must be an array");
+      }
+
+      // Validate each experience entry
+      parsedData.experience = parsedData.experience.map((exp) => ({
+        title: exp.title || "",
+        company: exp.company || "",
+        location: exp.location || "",
+        startDate: exp.startDate || "",
+        endDate: exp.endDate || null,
+        description: exp.description || "",
+      }));
+
+      // Validate each project entry
+      parsedData.projects = parsedData.projects.map((proj) => ({
+        name: proj.name || "",
+        description: proj.description || "",
+        technologies: Array.isArray(proj.technologies) ? proj.technologies : [],
+        url: proj.url || "",
+      }));
+
+      console.log(
+        "Successfully extracted and validated resume data:",
+        parsedData
+      );
       return parsedData;
     } catch (parseError) {
       console.error("Failed to parse or validate LLM response:", parseError);
       console.error("Raw Response:", llmResponse);
+      console.error("Attempted JSON:", jsonMatch[0]);
       throw new Error("Failed to parse valid JSON from LLM response");
     }
   } catch (error) {
     console.error("Error extracting resume data with LLM:", error);
-    // Return empty data structure if there's an error
     return {
       skills: [],
       experience: [],
-      projects: []
+      projects: [],
     };
   }
 }
@@ -105,28 +123,30 @@ ${resumeText}`;
  */
 function formatExperienceEntries(experiences) {
   if (!experiences || !Array.isArray(experiences)) return [];
-  
-  return experiences.map(exp => {
-    if (typeof exp === 'object') {
-      // Format experience object into a string
-      const parts = [];
-      if (exp.title) parts.push(exp.title);
-      if (exp.company) parts.push(exp.company);
-      if (exp.date) parts.push(exp.date);
-      
-      let formattedExp = parts.join(' | ');
-      
-      if (exp.description) {
-        formattedExp += ': ' + exp.description;
+
+  return experiences
+    .map((exp) => {
+      if (typeof exp === "object") {
+        // Format experience object into a string
+        const parts = [];
+        if (exp.title) parts.push(exp.title);
+        if (exp.company) parts.push(exp.company);
+        if (exp.date) parts.push(exp.date);
+
+        let formattedExp = parts.join(" | ");
+
+        if (exp.description) {
+          formattedExp += ": " + exp.description;
+        }
+
+        return formattedExp;
+      } else if (typeof exp === "string") {
+        // Already a string
+        return exp;
       }
-      
-      return formattedExp;
-    } else if (typeof exp === 'string') {
-      // Already a string
-      return exp;
-    }
-    return '';
-  }).filter(exp => exp.length > 0);
+      return "";
+    })
+    .filter((exp) => exp.length > 0);
 }
 
 /**
@@ -136,30 +156,32 @@ function formatExperienceEntries(experiences) {
  */
 function formatProjectEntries(projects) {
   if (!projects || !Array.isArray(projects)) return [];
-  
-  return projects.map(proj => {
-    if (typeof proj === 'object') {
-      // Format project object into a string
-      const parts = [];
-      if (proj.name) parts.push(proj.name);
-      
-      if (proj.technologies && Array.isArray(proj.technologies)) {
-        parts.push(proj.technologies.join(', '));
+
+  return projects
+    .map((proj) => {
+      if (typeof proj === "object") {
+        // Format project object into a string
+        const parts = [];
+        if (proj.name) parts.push(proj.name);
+
+        if (proj.technologies && Array.isArray(proj.technologies)) {
+          parts.push(proj.technologies.join(", "));
+        }
+
+        let formattedProj = parts.join(" | ");
+
+        if (proj.description) {
+          formattedProj += ": " + proj.description;
+        }
+
+        return formattedProj;
+      } else if (typeof proj === "string") {
+        // Already a string
+        return proj;
       }
-      
-      let formattedProj = parts.join(' | ');
-      
-      if (proj.description) {
-        formattedProj += ': ' + proj.description;
-      }
-      
-      return formattedProj;
-    } else if (typeof proj === 'string') {
-      // Already a string
-      return proj;
-    }
-    return '';
-  }).filter(proj => proj.length > 0);
+      return "";
+    })
+    .filter((proj) => proj.length > 0);
 }
 
 /**
@@ -175,14 +197,21 @@ async function parseResumeWithLLM(pdfBuffer) {
     if (Buffer.isBuffer(pdfBuffer)) {
       try {
         // Use PDF parsing library to get text
-        const pdfParse = (await import('pdf-parse')).default;
+        const pdfParse = (await import("pdf-parse")).default;
         const fallbackData = await pdfParse(pdfBuffer, {
           max: 15 * 1024 * 1024, // 15MB limit
         });
 
-        if (fallbackData && fallbackData.text && fallbackData.text.trim().length > 0) {
+        if (
+          fallbackData &&
+          fallbackData.text &&
+          fallbackData.text.trim().length > 0
+        ) {
           rawText = fallbackData.text;
-          console.log("PDF parsing successful, retrieved text length:", rawText.length);
+          console.log(
+            "PDF parsing successful, retrieved text length:",
+            rawText.length
+          );
         } else {
           // If the input might already be text, try to use it directly
           rawText = pdfBuffer.toString("utf8");
@@ -211,7 +240,9 @@ async function parseResumeWithLLM(pdfBuffer) {
     } else if (pdfBuffer && typeof pdfBuffer === "object" && pdfBuffer.text) {
       // This might be the result of pdf-parse directly
       rawText = pdfBuffer.text;
-      console.log(`Using text from pdf-parse object, length: ${rawText.length}`);
+      console.log(
+        `Using text from pdf-parse object, length: ${rawText.length}`
+      );
     } else {
       console.error("Invalid input type");
       return {
@@ -224,13 +255,13 @@ async function parseResumeWithLLM(pdfBuffer) {
 
     // Extract data using LLM
     const extractedData = await extractResumeDataWithLLM(rawText);
-    
+
     // Format the data to match the expected output structure
     return {
       skills: extractedData.skills || [],
       experience: formatExperienceEntries(extractedData.experience || []),
       projects: formatProjectEntries(extractedData.projects || []),
-      rawText
+      rawText,
     };
   } catch (error) {
     console.error("Error parsing resume with LLM:", error);
@@ -247,5 +278,5 @@ export {
   parseResumeWithLLM,
   extractResumeDataWithLLM,
   formatExperienceEntries,
-  formatProjectEntries
+  formatProjectEntries,
 };

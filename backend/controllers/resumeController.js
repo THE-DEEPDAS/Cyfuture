@@ -45,91 +45,73 @@ export const uploadResume = async (req, res) => {
       throw new Error("Failed to upload file");
     }
 
-    // Try to parse the resume, but don't fail if parsing isn't perfect
+    // Parse the resume using LLM
     try {
-      console.log("Attempting to parse resume");
-      parsedData = await parseResume(req.file.buffer);
-      console.log("Resume parsed successfully");
+      console.log("Attempting to parse resume with LLM");
+      const { parseResumeWithLLM } = await import(
+        "../services/llmResumeExtractor.js"
+      );
+      parsedData = await parseResumeWithLLM(req.file.buffer);
+      console.log("Resume parsed successfully:", parsedData);
     } catch (parseError) {
-      console.warn("Resume parsing had issues:", parseError.message);
-      // Create a minimal parsed data structure
+      console.error("Resume parsing error:", parseError);
+      // Create empty structure if parsing fails
       parsedData = {
-        name: "",
-        email: "",
-        phone: "",
         skills: [],
         experience: [],
-        education: [],
         projects: [],
       };
     }
 
-    // Format the parsed data (or empty structure) safely
-    const formattedData = {
-      name: parsedData?.name || "",
-      email: parsedData?.email || "",
-      phone: parsedData?.phone || "",
-      skills: Array.isArray(parsedData?.skills) ? parsedData.skills : [],
-      experience: (parsedData?.experience || []).map((exp) => ({
-        title: exp?.title || "",
-        company: exp?.company || "",
-        location: exp?.location || "",
-        startDate: exp?.startDate?.toString() || "",
-        endDate: exp?.endDate?.toString() || "",
-        description: exp?.description || "",
-      })),
-      education: (parsedData?.education || []).map((edu) => ({
-        institution: edu?.institution || "",
-        degree: edu?.degree || "",
-        field: edu?.field || "",
-        startDate: edu?.startDate?.toString() || "",
-        endDate: edu?.endDate?.toString() || "",
-      })),
-      projects: (parsedData?.projects || []).map((proj) => ({
-        name: proj?.name || "",
-        description: proj?.description || "",
-        technologies: Array.isArray(proj?.technologies)
-          ? proj.technologies
-          : [],
-        url: proj?.url || "",
-      })),
-    };
-
-    // Create resume record with the file URL and any parsed data we could get
+    // Create resume record with validated data structure
     const resume = await Resume.create({
       user: req.user._id,
       title: req.body.title || req.file.originalname.split(".")[0],
       fileUrl: cloudinaryResult.secure_url,
       fileType: req.file.originalname.split(".").pop().toLowerCase(),
-      parsedData: formattedData,
+      parsedData: {
+        skills: Array.isArray(parsedData.skills) ? parsedData.skills : [],
+        experience: Array.isArray(parsedData.experience)
+          ? parsedData.experience.map((exp) => ({
+              title: exp.title || "",
+              company: exp.company || "",
+              location: exp.location || "",
+              startDate: exp.startDate || "",
+              endDate: exp.endDate || null,
+              description: exp.description || "",
+            }))
+          : [],
+        projects: Array.isArray(parsedData.projects)
+          ? parsedData.projects.map((proj) => ({
+              name: proj.name || "",
+              description: proj.description || "",
+              technologies: Array.isArray(proj.technologies)
+                ? proj.technologies
+                : [],
+              url: proj.url || "",
+            }))
+          : [],
+      },
       isDefault: (await Resume.countDocuments({ user: req.user._id })) === 0,
     });
 
     console.log("Resume record created successfully");
 
-    // Return success even if parsing wasn't perfect
     res.status(201).json({
       success: true,
       resume,
-      parsedData: formattedData,
-      parsingComplete: !!parsedData.skills,
+      parsedData: resume.parsedData,
     });
   } catch (error) {
     console.error("Resume upload error:", error);
-    // If we uploaded to Cloudinary but something else failed, cleanup
-    if (cloudinaryResult && cloudinaryResult.public_id) {
+    if (cloudinaryResult?.public_id) {
       try {
         await deleteFile(cloudinaryResult.public_id);
-        console.log("Cleaned up Cloudinary file after error");
-      } catch (cleanupError) {
-        console.error("Failed to cleanup Cloudinary file:", cleanupError);
+      } catch (deleteError) {
+        console.error("Error deleting file from Cloudinary:", deleteError);
       }
     }
-
-    res.status(500).json({
-      message: "Failed to process resume upload",
-      error: error.message,
-    });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -167,7 +149,41 @@ export const getResume = async (req, res) => {
       return res.status(404).json({ message: "Resume not found" });
     }
 
-    res.json(resume);
+    // Ensure proper data structure before sending
+    const formattedResponse = {
+      ...resume.toObject(),
+      parsedData: {
+        skills: Array.isArray(resume.parsedData?.skills)
+          ? resume.parsedData.skills
+          : [],
+        experience: Array.isArray(resume.parsedData?.experience)
+          ? resume.parsedData.experience.map((exp) => ({
+              title: exp.title || "",
+              company: exp.company || "",
+              location: exp.location || "",
+              startDate: exp.startDate || "",
+              endDate: exp.endDate || null,
+              description: exp.description || "",
+            }))
+          : [],
+        projects: Array.isArray(resume.parsedData?.projects)
+          ? resume.parsedData.projects.map((proj) => ({
+              name: proj.name || "",
+              description: proj.description || "",
+              technologies: Array.isArray(proj.technologies)
+                ? proj.technologies
+                : [],
+              url: proj.url || "",
+            }))
+          : [],
+      },
+    };
+
+    console.log(
+      "Sending formatted resume data:",
+      JSON.stringify(formattedResponse.parsedData, null, 2)
+    );
+    res.json(formattedResponse);
   } catch (error) {
     console.error("Get resume error:", error);
     res.status(500).json({ message: "Server error fetching resume" });

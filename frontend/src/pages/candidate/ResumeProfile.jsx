@@ -13,97 +13,47 @@ const ResumeProfile = () => {
     const fetchResumeData = async () => {
       try {
         setLoading(true);
-        // If resumeId is provided, fetch that specific resume
-        let response;
-        if (resumeId) {
-          response = await axios.get(`/api/resumes/${resumeId}`);
-        } else {
-          // Otherwise fetch the default resume or the first one
-          response = await axios.get("/api/resumes/default");
-        }
+        // Get resume data from API
+        const response = await axios.get(
+          resumeId ? `/api/resumes/${resumeId}` : "/api/resumes/default"
+        );
 
-        console.log('Resume API Response:', {
+        console.log("Resume API Response:", {
           fullData: response.data,
           parsedData: response.data?.parsedData,
           skills: response.data?.parsedData?.skills,
           experience: response.data?.parsedData?.experience,
-          projects: response.data?.parsedData?.projects
+          projects: response.data?.parsedData?.projects,
         });
 
-        setResumeData(response.data);
+        // Clean up the data before setting it
+        const cleanedData = {
+          ...response.data,
+          parsedData: {
+            ...response.data.parsedData,
+            experience:
+              response.data.parsedData.experience?.map((exp) => ({
+                ...exp,
+                title: exp.title || "",
+                company: exp.company || "",
+                location: exp.location || "",
+                description: exp.description || "",
+              })) || [],
+            projects:
+              response.data.parsedData.projects?.map((proj) => ({
+                ...proj,
+                name: proj.name || "",
+                description: proj.description || "",
+                technologies: proj.technologies || [],
+              })) || [],
+          },
+        };
+        setResumeData(cleanedData);
         setLoading(false);
       } catch (err) {
         console.error("Error fetching resume data:", err);
         setError("Failed to load resume data. Please try again later.");
         setLoading(false);
-
-        // For development/demo purposes, set sample data if API fails
-        setResumeData({
-          title: "Software Developer Resume",
-          parsedData: {
-            skills: [
-              "JavaScript",
-              "React",
-              "Node.js",
-              "TypeScript",
-              "MongoDB",
-              "Express",
-              "HTML/CSS",
-              "GraphQL",
-              "AWS",
-              "Docker",
-            ],
-            experience: [
-              {
-                title: "Senior Frontend Developer",
-                company: "Tech Innovations Inc.",
-                location: "San Francisco, CA",
-                startDate: "2023-01-01",
-                endDate: null, // Current position
-                description:
-                  "Led a team of 5 developers to build a modern React-based application. Implemented state management with Redux and optimized performance to improve load times by 40%.",
-              },
-              {
-                title: "Full Stack Developer",
-                company: "Digital Solutions Co.",
-                location: "Remote",
-                startDate: "2021-03-01",
-                endDate: "2022-12-31",
-                description:
-                  "Developed and maintained multiple client applications using MERN stack. Implemented RESTful APIs and integrated with third-party services.",
-              },
-            ],
-            projects: [
-              {
-                name: "E-commerce Platform",
-                description:
-                  "Built a full-featured e-commerce platform with React, Node.js, and MongoDB. Features include user authentication, product catalog, shopping cart, and payment processing.",
-                technologies: [
-                  "React",
-                  "Node.js",
-                  "Express",
-                  "MongoDB",
-                  "Stripe API",
-                ],
-              },
-              {
-                name: "Task Management System",
-                description:
-                  "Developed a collaborative task management system with real-time updates using Socket.IO and React. Implemented drag-and-drop functionality and user permission system.",
-                technologies: ["React", "Socket.IO", "Express", "PostgreSQL"],
-              },
-            ],
-            education: [
-              {
-                institution: "University of Technology",
-                degree: "Bachelor of Science",
-                field: "Computer Science",
-                startDate: "2017-09-01",
-                endDate: "2021-05-31",
-              },
-            ],
-          },
-        });
       }
     };
 
@@ -198,41 +148,36 @@ const ResumeProfile = () => {
         </div>
 
         <div className="space-y-6">
-          {Array.isArray(resumeData?.parsedData?.experience) ? (
-            resumeData.parsedData.experience.length > 0 ? (
-              resumeData.parsedData.experience.map((exp, index) => (
-                <div
-                  key={index}
-                  className="border-l-2 border-primary-700 pl-4 pb-6 last:pb-0"
-                >
-                  <div className="flex justify-between items-start">
+          {Array.isArray(resumeData?.parsedData?.experience) &&
+          resumeData.parsedData.experience.length > 0 ? (
+            resumeData.parsedData.experience.map((exp, index) => (
+              <div
+                key={index}
+                className="border-l-2 border-primary-700 pl-4 pb-6 last:pb-0"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
                     <h3 className="text-lg font-medium text-white">
-                      {exp.title || "Position"}
+                      {exp.title}
                     </h3>
-                    <span className="text-sm text-gray-400">
-                      {formatDate(exp.startDate)} - {formatDate(exp.endDate)}
-                    </span>
+                    <p className="text-primary-300">
+                      {exp.company}
+                      {exp.location && ` • ${exp.location}`}
+                    </p>
                   </div>
-                  <p className="text-primary-300 mb-2">
-                    {exp.company}
-                    {exp.location ? `, ${exp.location}` : ""}
-                  </p>
-                  {exp.description && (
-                    <p className="text-gray-300">{exp.description}</p>
-                  )}
+                  <span className="text-sm text-gray-400">
+                    {formatDate(exp.startDate)} - {formatDate(exp.endDate)}
+                  </span>
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-4">
-                <p className="text-gray-400">
-                  No experience data extracted from your resume.
-                </p>
+                {exp.description && (
+                  <p className="text-gray-300 mt-2">{exp.description}</p>
+                )}
               </div>
-            )
+            ))
           ) : (
             <div className="text-center py-4">
               <p className="text-gray-400">
-                Experience data format is invalid.
+                No experience data extracted from your resume.
               </p>
             </div>
           )}
@@ -247,18 +192,21 @@ const ResumeProfile = () => {
         </div>
 
         <div className="space-y-6">
-          {Array.isArray(resumeData?.parsedData?.projects) ? (
-            resumeData.parsedData.projects.length > 0 ? (
-              resumeData.parsedData.projects.map((project, index) => (
-                <div key={index} className="bg-background-secondary rounded-lg p-4">
-                  <h3 className="text-lg font-medium text-white mb-2">
-                    {project.name || 'Project'}
-                  </h3>
-                  {project.description && (
-                    <p className="text-gray-300 mb-3">{project.description}</p>
-                  )}
-
-                  {Array.isArray(project.technologies) && project.technologies.length > 0 && (
+          {Array.isArray(resumeData?.parsedData?.projects) &&
+          resumeData.parsedData.projects.length > 0 ? (
+            resumeData.parsedData.projects.map((project, index) => (
+              <div
+                key={index}
+                className="bg-background-secondary rounded-lg p-4"
+              >
+                <h3 className="text-lg font-medium text-white mb-2">
+                  {project.name}
+                </h3>
+                {project.description && (
+                  <p className="text-gray-300 mb-3">{project.description}</p>
+                )}
+                {Array.isArray(project.technologies) &&
+                  project.technologies.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {project.technologies.map((tech, techIndex) => (
                         <span
@@ -270,31 +218,26 @@ const ResumeProfile = () => {
                       ))}
                     </div>
                   )}
-
-                  {project.url && (
-                    <a
-                      href={project.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-2 inline-block text-primary-400 hover:text-primary-300 transition-colors"
-                    >
-                      <FontAwesomeIcon icon="external-link-alt" className="mr-1" />
-                      View Project
-                    </a>
-                  )}
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-4">
-                <p className="text-gray-400">
-                  No project data extracted from your resume.
-                </p>
+                {project.url && project.url !== "GitHub" && (
+                  <a
+                    href={project.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-block text-primary-400 hover:text-primary-300 transition-colors"
+                  >
+                    <FontAwesomeIcon
+                      icon="external-link-alt"
+                      className="mr-1"
+                    />
+                    View Project
+                  </a>
+                )}
               </div>
-            )
+            ))
           ) : (
             <div className="text-center py-4">
               <p className="text-gray-400">
-                Project data format is invalid.
+                No project data extracted from your resume.
               </p>
             </div>
           )}
