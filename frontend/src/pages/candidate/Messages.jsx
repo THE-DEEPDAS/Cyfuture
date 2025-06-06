@@ -95,15 +95,11 @@ const Messages = () => {
       if (!activeConversation) return;
 
       try {
-        const response = await axios.get(
-          `/api/messages/conversations/${activeConversation._id}`
+        const response = await api.get(
+          `/messages/conversations/${activeConversation._id}`
         );
-        setMessages(response.data.messages.reverse()); // Reverse to show oldest first
-
-        // Mark messages as read
-        await axios.put("/api/messages/read", {
-          conversationId: activeConversation._id,
-        });
+        setMessages(response.data.messages.reverse()); // Reverse to show oldest first        // Mark messages as read
+        await api.put(`/messages/conversations/${activeConversation._id}/read`);
 
         // Update unread counts in conversations list
         setConversations((prev) =>

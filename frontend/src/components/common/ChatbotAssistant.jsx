@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import axios from "axios";
+import api from "../../utils/api";
 
 const ChatbotAssistant = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -65,8 +65,7 @@ const ChatbotAssistant = () => {
         .slice(-4) // Last 4 messages for context
         .map((msg) => `${msg.isBot ? "Assistant" : "User"}: ${msg.content}`)
         .join("\n");
-
-      const response = await axios.post("/api/chat", {
+      const response = await api.post("/chat", {
         message: newMessage,
         context,
         language: currentLanguage,

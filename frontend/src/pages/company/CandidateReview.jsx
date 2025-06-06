@@ -43,16 +43,16 @@ const CandidateReview = () => {
         setError(null);
 
         // Fetch jobs for the company
-        const jobsResponse = await api.get("/api/jobs/company/me");
+        const jobsResponse = await api.get("/jobs/company/me");
         setJobs(jobsResponse.data);
 
         // If a specific job is selected, fetch its applications with LLM insights
         if (selectedJob && selectedJob !== "all") {
           const [applicationsResponse, llmResponse, scoresResponse] =
             await Promise.all([
-              api.get(`/api/applications/job/${selectedJob}`),
-              api.get(`/api/applications/job/${selectedJob}/llm-analysis`),
-              api.get(`/api/applications/job/${selectedJob}/matching-scores`),
+              api.get(`/applications/job/${selectedJob}`),
+              api.get(`/applications/job/${selectedJob}/llm-analysis`),
+              api.get(`/applications/job/${selectedJob}/matching-scores`),
             ]);
 
           setApplications(applicationsResponse.data);
@@ -67,9 +67,7 @@ const CandidateReview = () => {
             setShortlistedCandidates(jobDetails.shortlistedCandidates);
           }
         } else {
-          const applicationsResponse = await api.get(
-            "/api/applications/company"
-          );
+          const applicationsResponse = await api.get("/applications/company");
           setApplications(applicationsResponse.data);
         }
       } catch (err) {
@@ -84,7 +82,7 @@ const CandidateReview = () => {
 
   const handleShortlist = async (applicationId) => {
     try {
-      await api.post(`/api/applications/${applicationId}/shortlist`);
+      await api.post(`/applications/${applicationId}/shortlist`);
       setShortlistedCandidates((prev) => [...prev, applicationId]);
       // Show success message or update UI
     } catch (err) {
@@ -94,7 +92,7 @@ const CandidateReview = () => {
 
   const handleRemoveShortlist = async (applicationId) => {
     try {
-      await api.delete(`/api/applications/${applicationId}/shortlist`);
+      await api.delete(`/applications/${applicationId}/shortlist`);
       setShortlistedCandidates((prev) =>
         prev.filter((id) => id !== applicationId)
       );

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import axios from "axios";
+import api from "../../utils/api";
 
 const ResumeProfile = () => {
   const { resumeId } = useParams();
@@ -14,8 +14,8 @@ const ResumeProfile = () => {
       try {
         setLoading(true);
         // Get resume data from API
-        const response = await axios.get(
-          resumeId ? `/api/resumes/${resumeId}` : "/api/resumes/default"
+        const response = await api.get(
+          resumeId ? `/resumes/${resumeId}` : "/resumes/default"
         );
 
         console.log("Resume API Response:", {

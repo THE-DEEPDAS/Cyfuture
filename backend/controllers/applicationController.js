@@ -700,60 +700,98 @@ export const getJobApplications = asyncHandler(async (req, res) => {
     llmExplanations,
     shortlistedCandidates,
   });
-});
-
-// Calculate matching score between resume and job requirements
+}); // Calculate matching score between resume and job requirements
 const calculateMatchingScore = async (resumeData, jobRequirements) => {
   let score = 0;
   const weights = {
-    skills: 0.4,
-    experience: 0.3,
-    education: 0.2,
-    projects: 0.1,
+    skills: 0.5, // Combined required and preferred skills
+    experience: 0.2, // Years and relevance of experience
+    education: 0.2, // Education match
+    projects: 0.1, // Relevant project experience
   };
 
-  // Skills match
-  const requiredSkills = new Set(
-    jobRequirements.skills.map((s) => s.toLowerCase())
-  );
+  // Skills matching
   const candidateSkills = new Set(
-    resumeData.skills.map((s) => s.toLowerCase())
+    resumeData.skills?.map((s) => s.toLowerCase()) || []
   );
-  const skillsMatch =
-    Array.from(requiredSkills).filter((skill) => candidateSkills.has(skill))
-      .length / requiredSkills.size;
+
+  // Get required and preferred skills from job requirements
+  const requiredSkills = new Set(
+    jobRequirements.requiredSkills?.map((s) => s.toLowerCase()) || []
+  );
+  const preferredSkills = new Set(
+    jobRequirements.preferredSkills?.map((s) => s.toLowerCase()) || []
+  );
+
+  // Calculate required skills match (70% of skills weight)
+  const requiredMatch =
+    requiredSkills.size > 0
+      ? Array.from(requiredSkills).filter((skill) => candidateSkills.has(skill))
+          .length / requiredSkills.size
+      : 1; // If no required skills specified, assume full match
+
+  // Calculate preferred skills match (30% of skills weight)
+  const preferredMatch =
+    preferredSkills.size > 0
+      ? Array.from(preferredSkills).filter((skill) =>
+          candidateSkills.has(skill)
+        ).length / preferredSkills.size
+      : 0;
+
+  // Combined skills match score
+  const skillsMatch = requiredMatch * 0.7 + preferredMatch * 0.3;
 
   // Experience match (years)
-  const experienceMatch = Math.min(
-    resumeData.experience.length / jobRequirements.minExperience,
-    1
-  );
+  const experienceMatch = jobRequirements.minExperience
+    ? Math.min(
+        (resumeData.experience?.length || 0) / jobRequirements.minExperience,
+        1
+      )
+    : 1; // If no minimum experience specified, assume full match
 
   // Education match
-  const educationMatch = resumeData.education.some((edu) =>
-    edu.degree
-      ?.toLowerCase()
-      .includes(jobRequirements.preferredDegree?.toLowerCase() || "")
-  )
+  const educationMatch = !jobRequirements.preferredDegree
+    ? 1 // If no preferred degree specified, assume full match
+    : (resumeData.education || []).some((edu) =>
+        edu.degree
+          ?.toLowerCase()
+          .includes(jobRequirements.preferredDegree.toLowerCase())
+      )
     ? 1
     : 0.5;
 
   // Project match (based on relevant keywords)
-  const projectKeywords = jobRequirements.skills.map((s) => s.toLowerCase());
-  const projectMatches = resumeData.projects.filter((project) =>
-    projectKeywords.some((keyword) =>
-      project.description?.toLowerCase().includes(keyword)
+  const projectKeywords = new Set(
+    [
+      ...(jobRequirements.requiredSkills || []),
+      ...(jobRequirements.preferredSkills || []),
+    ].map((s) => s.toLowerCase())
+  );
+
+  const projectMatches = (resumeData.projects || []).filter((project) =>
+    Array.from(projectKeywords).some(
+      (keyword) =>
+        project.description?.toLowerCase().includes(keyword) ||
+        (project.technologies || []).some((tech) =>
+          tech.toLowerCase().includes(keyword)
+        )
     )
   ).length;
+
   const projectMatch = Math.min(projectMatches / 2, 1); // Normalize to max of 1
 
+  // Calculate final skills score combining required and preferred
+  const skillsScore = requiredMatch * 0.7 + preferredMatch * 0.3;
+
+  // Calculate final score
   score =
-    weights.skills * skillsMatch +
+    weights.skills * skillsScore +
     weights.experience * experienceMatch +
     weights.education * educationMatch +
     weights.projects * projectMatch;
 
-  return Math.min(Math.max(score, 0), 1); // Ensure score is between 0 and 1
+  // Return score as percentage
+  return Math.round(Math.min(Math.max(score * 100, 0), 100));
 };
 
 /**

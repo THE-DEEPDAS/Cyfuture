@@ -9,6 +9,7 @@ import {
 import { useNavigate } from "react-router-dom";
 
 const JobSearch = () => {
+  const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({
     location: "",
@@ -16,104 +17,22 @@ const JobSearch = () => {
     experience: "",
     salary: "",
   });
-  const [jobs, setJobs] = useState([
-    {
-      id: "1",
-      title: "Senior Frontend Developer",
-      company: "TechCorp",
-      location: "New York, NY",
-      type: "Full-time",
-      salary: "$120,000 - $150,000",
-      experience: "Senior",
-      skills: ["React", "TypeScript", "CSS", "HTML", "Redux"],
-      description:
-        "We are looking for an experienced Frontend Developer to join our team...",
-      postedDate: "2025-03-15T10:00:00Z",
-      matchScore: 94,
-    },
-    {
-      id: "2",
-      title: "Backend Developer",
-      company: "DataSystems",
-      location: "Remote",
-      type: "Full-time",
-      salary: "$100,000 - $130,000",
-      experience: "Mid-Level",
-      skills: ["Node.js", "Express", "MongoDB", "AWS", "Docker"],
-      description: "Join our team to build robust backend systems...",
-      postedDate: "2025-03-14T15:30:00Z",
-      matchScore: 87,
-    },
-    {
-      id: "3",
-      title: "Full Stack Developer",
-      company: "GrowthStartup",
-      location: "San Francisco, CA",
-      type: "Full-time",
-      salary: "$130,000 - $160,000",
-      experience: "Mid-Level",
-      skills: ["React", "Node.js", "PostgreSQL", "TypeScript", "GraphQL"],
-      description:
-        "Looking for a talented Full Stack Developer to help us grow...",
-      postedDate: "2025-03-12T09:15:00Z",
-      matchScore: 91,
-    },
-    {
-      id: "4",
-      title: "Mobile App Developer",
-      company: "AppWorks",
-      location: "Austin, TX",
-      type: "Full-time",
-      salary: "$110,000 - $140,000",
-      experience: "Mid-Level",
-      skills: ["React Native", "iOS", "Android", "JavaScript", "Firebase"],
-      description: "Join our mobile team to build cutting-edge applications...",
-      postedDate: "2025-03-10T14:20:00Z",
-      matchScore: 82,
-    },
-    {
-      id: "5",
-      title: "UI/UX Designer",
-      company: "DesignHub",
-      location: "Remote",
-      type: "Contract",
-      salary: "$70-90/hour",
-      experience: "Mid-Level",
-      skills: [
-        "Figma",
-        "Adobe XD",
-        "UI Design",
-        "User Research",
-        "Prototyping",
-      ],
-      description:
-        "We need a creative designer to help us create amazing user experiences...",
-      postedDate: "2025-03-08T11:45:00Z",
-      matchScore: 76,
-    },
-    {
-      id: "6",
-      title: "DevOps Engineer",
-      company: "CloudSystems",
-      location: "Chicago, IL",
-      type: "Full-time",
-      salary: "$125,000 - $155,000",
-      experience: "Senior",
-      skills: ["Kubernetes", "Docker", "AWS", "CI/CD", "Terraform"],
-      description:
-        "Join our DevOps team to build and maintain our cloud infrastructure...",
-      postedDate: "2025-03-05T13:30:00Z",
-      matchScore: 79,
-    },
-  ]);
+  const [jobs, setJobs] = useState([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [sortBy, setSortBy] = useState("matchScore"); // ["matchScore", "recent", "salary"]
   const [selectedJob, setSelectedJob] = useState(null);
   const [isApplying, setIsApplying] = useState(false);
   const [coverLetter, setCoverLetter] = useState("");
   const [selectedResume, setSelectedResume] = useState("");
   const [resumeData, setResumeData] = useState(null);
   const [matchExplanations, setMatchExplanations] = useState({});
-  const [loadingJobs, setLoadingJobs] = useState(true);
   const navigate = useNavigate(); // Add navigate hook
+
+  // Constants for filter options
+  const JOB_TYPES = ["Full-time", "Part-time", "Contract", "Internship", "Remote"];
+  const EXPERIENCE_LEVELS = ["Entry Level", "Mid-Level", "Senior", "Lead", "Executive"];
 
   // Fetch resume data and jobs on component mount
   useEffect(() => {
@@ -121,34 +40,40 @@ const JobSearch = () => {
       try {
         setLoadingJobs(true);
 
-        // Get resume data
-        const resume = await getUserResumeData();
-        setResumeData(resume);
+        // Get active resume
+        const resume = await api.get('/api/resumes/default');
+        setResumeData(resume.data);
 
-        // Fetch jobs from API
-        try {
-          const response = await axios.get("/api/jobs");
-          const jobsData = response.data;
+        // Build query params for job search
+        const params = new URLSearchParams({
+          page,
+          limit: 10,
+          sortBy,
+          ...(searchTerm && { search: searchTerm }),
+          ...(filters.location && { location: filters.location }),
+          ...(filters.jobType && { type: filters.jobType }),
+          ...(filters.experience && { experience: filters.experience })
+        });
 
-          // Calculate match scores if we have resume data
-          if (resume) {
-            const jobsWithScores = jobsData.map((job) => ({
-              ...job,
-              matchScore: calculateMatchScore(job, resume),
-            }));
+        // Fetch jobs with match scores
+        const response = await api.get(`/api/jobs/matching/${resume.data._id}?${params}`);
+        
+        const { jobs: fetchedJobs, total, pages } = response.data;
+        setJobs(fetchedJobs);
+        setTotalPages(pages);
 
-            // Sort by match score (highest first)
-            jobsWithScores.sort((a, b) => b.matchScore - a.matchScore);
-            setJobs(jobsWithScores);
-          } else {
-            setJobs(jobsData);
+        // Cache match explanations
+        const explanations = {};
+        fetchedJobs.forEach(job => {
+          if (job.matchAnalysis) {
+            explanations[job._id] = job.matchAnalysis.explanation;
           }
-        } catch (error) {
-          console.error("Error fetching jobs:", error);
-          // Keep the sample data if API fails
-        }
+        });
+        setMatchExplanations(prev => ({ ...prev, ...explanations }));
+
       } catch (error) {
-        console.error("Error initializing job search:", error);
+        console.error("Error fetching jobs:", error);
+        toast.error(error.response?.data?.message || "Failed to fetch jobs");
       } finally {
         setLoadingJobs(false);
       }
@@ -213,10 +138,34 @@ const JobSearch = () => {
   };
 
   // Submit application
-  const submitApplication = (e) => {
+  const submitApplication = async (e) => {
     e.preventDefault();
-    alert("Application submitted successfully!");
-    setIsApplying(false);
+    
+    try {
+      setSubmitting(true);
+      
+      const response = await api.post(`/api/applications/${selectedJob.id}`, {
+        resumeId: selectedResume,
+        coverLetter,
+        screeningResponses: [] // Add screening questions if implemented
+      });
+
+      if (response.data) {
+        toast.success("Application submitted successfully!");
+        setIsApplying(false);
+        setSubmitting(false);
+        
+        // Update application count in jobs list
+        setJobs(jobs.map(job => 
+          job.id === selectedJob.id 
+            ? { ...job, applicationCount: (job.applicationCount || 0) + 1 }
+            : job
+        ));
+      }
+    } catch (error) {
+      setSubmitting(false);
+      toast.error(error.response?.data?.message || "Failed to submit application");
+    }
   };
 
   // Filter jobs based on search and filters

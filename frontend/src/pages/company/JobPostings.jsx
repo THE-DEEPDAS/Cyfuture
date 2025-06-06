@@ -136,7 +136,7 @@ const JobPostings = () => {
 
       const newStatus = !job.isActive;
 
-      await api.put(`/api/jobs/${jobId}`, { isActive: newStatus });
+      await api.put(`/jobs/${jobId}`, { isActive: newStatus });
 
       // Update job in state
       setJobs(
@@ -156,7 +156,7 @@ const JobPostings = () => {
   const deleteJob = async (jobId) => {
     if (window.confirm("Are you sure you want to delete this job posting?")) {
       try {
-        await api.delete(`/api/jobs/${jobId}`);
+        await api.delete(`/jobs/${jobId}`);
 
         // Remove job from state
         setJobs(jobs.filter((job) => job._id !== jobId));

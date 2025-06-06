@@ -27,11 +27,30 @@ export const createJob = asyncHandler(async (req, res) => {
     screeningQuestions,
     preferredSkills,
     llmEvaluation,
-  } = req.body;
-  // Basic validation
-  if (!title || !description || !location || !type || !experience) {
+  } = req.body; // Comprehensive validation
+  if (
+    !title ||
+    !description ||
+    !location ||
+    !type ||
+    !experience ||
+    !skills ||
+    !requirements
+  ) {
     res.status(400);
     throw new Error("Please fill all required fields");
+  }
+
+  if (salary) {
+    if (!salary.min || !salary.max || salary.min > salary.max) {
+      res.status(400);
+      throw new Error("Invalid salary range");
+    }
+  }
+
+  if (expiresAt && new Date(expiresAt) < new Date()) {
+    res.status(400);
+    throw new Error("Job expiry date must be in the future");
   }
 
   // Validate skills

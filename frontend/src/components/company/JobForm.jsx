@@ -183,7 +183,7 @@ const JobForm = ({ job, onSave, onCancel }) => {
         toast.success("Job updated successfully");
       } else {
         // Create new job
-        result = await api.post("/api/jobs", jobData);
+        result = await api.post("/jobs", jobData);
         toast.success("Job posted successfully");
       }
 

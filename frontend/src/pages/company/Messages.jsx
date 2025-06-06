@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import axios from "axios";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useAuth } from "../../context/AuthContext.jsx";
+import api from "../../utils/api";
 
 const CompanyMessages = () => {
   const { user } = useAuth();
@@ -21,7 +21,7 @@ const CompanyMessages = () => {
     const fetchConversations = async () => {
       try {
         setLoading(true);
-        const response = await axios.get("/api/messages/conversations");
+        const response = await api.get("/messages/conversations");
         setConversations(response.data);
 
         // Select first conversation if available
@@ -126,15 +126,11 @@ const CompanyMessages = () => {
       if (!activeConversation) return;
 
       try {
-        const response = await axios.get(
-          `/api/messages/conversations/${activeConversation._id}`
+        const response = await api.get(
+          `/messages/conversations/${activeConversation._id}`
         );
-        setMessages(response.data.messages.reverse()); // Reverse to show oldest first
-
-        // Mark messages as read
-        await axios.put("/api/messages/read", {
-          conversationId: activeConversation._id,
-        });
+        setMessages(response.data.messages.reverse()); // Reverse to show oldest first        // Mark messages as read
+        await api.put(`/messages/conversations/${activeConversation._id}/read`);
 
         // Update unread counts in conversations list
         setConversations((prev) =>
@@ -264,7 +260,7 @@ const CompanyMessages = () => {
       setNewMessage("");
 
       // Send message to API
-      const response = await axios.post("/api/messages", messageData);
+      const response = await api.post("/messages", messageData);
 
       // Replace optimistic message with real one
       setMessages((prev) =>
@@ -315,7 +311,7 @@ const CompanyMessages = () => {
     if (!selectedCandidate) return;
 
     try {
-      const response = await axios.post("/api/messages/conversations", {
+      const response = await api.post("/messages/conversations", {
         receiverId: selectedCandidate._id,
       });
 

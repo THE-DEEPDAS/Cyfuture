@@ -4,7 +4,7 @@ import api from "./api";
 export const testApiConnection = async () => {
   try {
     console.log("Testing API connection...");
-    const response = await api.get("/api/auth/test");
+    const response = await api.get("/auth/test");
     console.log("API test response:", response.data);
     return { success: true, data: response.data };
   } catch (error) {
@@ -21,7 +21,7 @@ export const testApiConnection = async () => {
 export const testUserAuth = async () => {
   try {
     console.log("Testing user authentication...");
-    const response = await api.get("/api/users/me");
+    const response = await api.get("/users/me");
     console.log("User auth test response:", response.data);
     return { success: true, user: response.data };
   } catch (error) {

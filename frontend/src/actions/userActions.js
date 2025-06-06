@@ -1,4 +1,4 @@
-import axios from "axios";
+import api from "../utils/api";
 import {
   USER_LOGIN_REQUEST,
   USER_LOGIN_SUCCESS,
@@ -27,11 +27,7 @@ export const login = (email, password) => async (dispatch) => {
         "Content-Type": "application/json",
       },
     };
-    const { data } = await axios.post(
-      `${API_URL}/auth/login`,
-      { email, password },
-      config
-    );
+    const { data } = await api.post("/auth/login", { email, password });
 
     dispatch({
       type: USER_LOGIN_SUCCESS,

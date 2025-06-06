@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import api from "../utils/api.js";
@@ -36,17 +35,17 @@ const AuthProvider = ({ children }) => {
       if (token) {
         try {
           // Set auth header
-          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+          api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
           // Get user data
           console.log("Fetching user data...");
-          const { data } = await api.get(`/users/me`);
+          const { data } = await api.get("/users/me");
           console.log("User data fetched:", data);
           setUser(data);
         } catch (error) {
           console.error("Auth initialization failed:", error);
           localStorage.removeItem("token");
-          delete axios.defaults.headers.common["Authorization"];
+          delete api.defaults.headers.common["Authorization"];
         }
       }
 
@@ -60,11 +59,11 @@ const AuthProvider = ({ children }) => {
   // Login function
   const login = async (credentials) => {
     try {
-      const { data } = await api.post(`/auth/login`, credentials);
+      const { data } = await api.post("/auth/login", credentials);
       console.log("Login successful, user data:", data);
 
       localStorage.setItem("token", data.token);
-      axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
+      api.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
 
       setUser(data.user);
 
@@ -94,7 +93,7 @@ const AuthProvider = ({ children }) => {
   // Register function
   const register = async (userData) => {
     try {
-      const { data } = await api.post(`/auth/register`, userData);
+      const { data } = await api.post("/auth/register", userData);
 
       localStorage.setItem("token", data.token);
       axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
@@ -123,7 +122,7 @@ const AuthProvider = ({ children }) => {
   // Logout function
   const logout = () => {
     localStorage.removeItem("token");
-    delete axios.defaults.headers.common["Authorization"];
+    delete api.defaults.headers.common["Authorization"];
     setUser(null);
     navigate("/login");
     toast.info("You have been logged out.");
