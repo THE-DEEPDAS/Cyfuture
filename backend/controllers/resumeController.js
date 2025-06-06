@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Resume from "../models/Resume.js";
 import { parseResume } from "../services/resumeParser.js";
 import { uploadFile, deleteFile, cloudinary } from "../utils/cloudinary.js";
@@ -401,5 +402,239 @@ const calculateLLMMatch = async (job, parsedData) => {
       confidence: 0,
       explanation: "Error in LLM analysis",
     };
+  }
+};
+
+/**
+ * @desc    Add a skill to the user's default resume
+ * @route   POST /api/resumes/skills
+ * @access  Private/Candidate
+ */
+export const addSkill = async (req, res) => {
+  try {
+    const { skill } = req.body;
+
+    if (!skill) {
+      return res.status(400).json({ message: "Skill is required" });
+    }
+
+    // Find default resume
+    const resume = await Resume.findOne({
+      user: req.user._id,
+      isDefault: true,
+    });
+
+    if (!resume) {
+      return res.status(404).json({ message: "No default resume found" });
+    }
+
+    // Add skill if it doesn't already exist
+    if (!resume.parsedData.skills.includes(skill)) {
+      resume.parsedData.skills.push(skill);
+      await resume.save();
+    }
+
+    res.json(resume);
+  } catch (error) {
+    console.error("Add skill error:", error);
+    res.status(500).json({ message: "Server error adding skill" });
+  }
+};
+
+/**
+ * @desc    Delete a skill from the user's default resume
+ * @route   DELETE /api/resumes/skills
+ * @access  Private/Candidate
+ */
+export const deleteSkill = async (req, res) => {
+  try {
+    const { skill } = req.body;
+
+    if (!skill) {
+      return res.status(400).json({ message: "Skill is required" });
+    }
+
+    // Find default resume
+    const resume = await Resume.findOne({
+      user: req.user._id,
+      isDefault: true,
+    });
+
+    if (!resume) {
+      return res.status(404).json({ message: "No default resume found" });
+    }
+
+    // Initialize skills array if it doesn't exist
+    if (!resume.parsedData || !Array.isArray(resume.parsedData.skills)) {
+      resume.parsedData = {
+        ...resume.parsedData,
+        skills: []
+      };
+    }
+
+    // Remove skill from array
+    resume.parsedData.skills = resume.parsedData.skills.filter(s => s !== skill);
+
+    // Save changes
+    await resume.save();
+
+    // Return updated resume data
+    res.json({
+      message: "Skill deleted successfully",
+      resume
+    });
+  } catch (error) {
+    console.error("Delete skill error:", error);
+    res.status(500).json({ message: "Server error deleting skill" });
+  }
+};
+
+/**
+ * @desc    Add experience to the user's default resume
+ * @route   POST /api/resumes/experience
+ * @access  Private/Candidate
+ */
+export const addExperience = async (req, res) => {
+  try {
+    const { title, company, location, startDate, endDate, description } = req.body;
+
+    if (!title || !company) {
+      return res.status(400).json({ message: "Title and company are required" });
+    }
+
+    // Find default resume
+    const resume = await Resume.findOne({
+      user: req.user._id,
+      isDefault: true,
+    });
+
+    if (!resume) {
+      return res.status(404).json({ message: "No default resume found" });
+    }
+
+    // Add new experience with a unique ID
+    const newExp = {
+      _id: new mongoose.Types.ObjectId(),
+      title,
+      company,
+      location,
+      startDate,
+      endDate,
+      description,
+    };
+
+    resume.parsedData.experience.push(newExp);
+    await resume.save();
+
+    res.json(resume);
+  } catch (error) {
+    console.error("Add experience error:", error);
+    res.status(500).json({ message: "Server error adding experience" });
+  }
+};
+
+/**
+ * @desc    Delete experience from the user's default resume
+ * @route   DELETE /api/resumes/experience/:id
+ * @access  Private/Candidate
+ */
+export const deleteExperience = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Find default resume
+    const resume = await Resume.findOne({
+      user: req.user._id,
+      isDefault: true,
+    });
+
+    if (!resume) {
+      return res.status(404).json({ message: "No default resume found" });
+    }
+
+    // Remove experience with matching ID
+    resume.parsedData.experience = resume.parsedData.experience.filter(
+      exp => exp._id.toString() !== id
+    );
+    await resume.save();
+
+    res.json(resume);
+  } catch (error) {
+    console.error("Delete experience error:", error);
+    res.status(500).json({ message: "Server error deleting experience" });
+  }
+};
+
+/**
+ * @desc    Add project to the user's default resume
+ * @route   POST /api/resumes/projects
+ * @access  Private/Candidate
+ */
+export const addProject = async (req, res) => {
+  try {
+    const { name, description, technologies, url } = req.body;
+
+    if (!name) {
+      return res.status(400).json({ message: "Project name is required" });
+    }
+
+    // Find default resume
+    const resume = await Resume.findOne({
+      user: req.user._id,
+      isDefault: true,
+    });
+
+    if (!resume) {
+      return res.status(404).json({ message: "No default resume found" });
+    }
+
+    // Add new project with a unique ID
+    const newProject = {
+      _id: new mongoose.Types.ObjectId(),
+      name,
+      description,
+      technologies: Array.isArray(technologies) ? technologies : [],
+      url,
+    };
+
+    resume.parsedData.projects.push(newProject);
+    await resume.save();
+
+    res.json(resume);
+  } catch (error) {
+    console.error("Add project error:", error);
+    res.status(500).json({ message: "Server error adding project" });
+  }
+};
+
+/**
+ * @desc    Delete project from the user's default resume
+ * @route   DELETE /api/resumes/projects/:id
+ * @access  Private/Candidate
+ */
+export const deleteProject = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Find default resume
+    const resume = await Resume.findOne({
+      user: req.user._id,
+      isDefault: true,
+    });
+
+    if (!resume) {
+      return res.status(404).json({ message: "No default resume found" });
+    }
+
+    // Remove project with matching ID
+    resume.parsedData.projects = resume.parsedData.projects.filter(
+      proj => proj._id.toString() !== id
+    );
+    await resume.save();
+
+    res.json(resume);
+  } catch (error) {
+    console.error("Delete project error:", error);
+    res.status(500).json({ message: "Server error deleting project" });
   }
 };

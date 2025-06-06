@@ -7,13 +7,31 @@ import {
   deleteResume,
   setDefaultResume,
   getDefaultResume,
+  addSkill,
+  deleteSkill,
+  addExperience,
+  deleteExperience,
+  addProject,
+  deleteProject,
 } from "../controllers/resumeController.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { upload } from "../config/cloudinaryConfig.js";
 
 const router = express.Router();
 
-// Apply multerErrorHandler after file upload middleware
+// Skills routes
+router.post("/skills", protect, addSkill);
+router.delete("/skills", protect, deleteSkill);
+
+// Experience routes
+router.post("/experience", protect, addExperience);
+router.delete("/experience/:id", protect, deleteExperience);
+
+// Project routes
+router.post("/projects", protect, addProject);
+router.delete("/projects/:id", protect, deleteProject);
+
+// File upload and general resume routes
 router.post(
   "/",
   protect,
