@@ -468,12 +468,14 @@ export const deleteSkill = async (req, res) => {
     if (!resume.parsedData || !Array.isArray(resume.parsedData.skills)) {
       resume.parsedData = {
         ...resume.parsedData,
-        skills: []
+        skills: [],
       };
     }
 
     // Remove skill from array
-    resume.parsedData.skills = resume.parsedData.skills.filter(s => s !== skill);
+    resume.parsedData.skills = resume.parsedData.skills.filter(
+      (s) => s !== skill
+    );
 
     // Save changes
     await resume.save();
@@ -481,7 +483,7 @@ export const deleteSkill = async (req, res) => {
     // Return updated resume data
     res.json({
       message: "Skill deleted successfully",
-      resume
+      resume,
     });
   } catch (error) {
     console.error("Delete skill error:", error);
@@ -496,10 +498,13 @@ export const deleteSkill = async (req, res) => {
  */
 export const addExperience = async (req, res) => {
   try {
-    const { title, company, location, startDate, endDate, description } = req.body;
+    const { title, company, location, startDate, endDate, description } =
+      req.body;
 
     if (!title || !company) {
-      return res.status(400).json({ message: "Title and company are required" });
+      return res
+        .status(400)
+        .json({ message: "Title and company are required" });
     }
 
     // Find default resume
@@ -554,7 +559,7 @@ export const deleteExperience = async (req, res) => {
 
     // Remove experience with matching ID
     resume.parsedData.experience = resume.parsedData.experience.filter(
-      exp => exp._id.toString() !== id
+      (exp) => exp._id.toString() !== id
     );
     await resume.save();
 
@@ -628,7 +633,7 @@ export const deleteProject = async (req, res) => {
 
     // Remove project with matching ID
     resume.parsedData.projects = resume.parsedData.projects.filter(
-      proj => proj._id.toString() !== id
+      (proj) => proj._id.toString() !== id
     );
     await resume.save();
 
