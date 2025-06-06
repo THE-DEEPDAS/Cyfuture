@@ -52,7 +52,7 @@ const calculateSkillsMatch = (job, candidate) => {
   return {
     requiredScore: Math.max(0, Math.min(1, requiredScore)),
     preferredScore: Math.max(0, Math.min(1, preferredScore)),
-    matchedSkills: [...new Set([...matchedRequired, ...matchedPreferred])], // Remove duplicates
+    matchedSkills: [...new Set([...matchedRequired, ...matchedPreferred])],
     missingSkills: validRequired.filter(
       (skill) => !matchedRequired.includes(skill)
     ),
@@ -85,7 +85,7 @@ const calculateExperienceMatch = (job, candidate) => {
     }, 0) || 0;
 
   const yearsScore = Math.min(candidateYears / Math.max(requiredYears, 1), 1);
-  const relevanceScore =
+  let relevanceScore =
     candidate.experience?.reduce((score, exp) => {
       if (!exp.title || !job.title) return score;
       const titleRelevance = job.title
@@ -98,7 +98,7 @@ const calculateExperienceMatch = (job, candidate) => {
 
   return {
     score: yearsScore * 0.7 + relevanceScore * 0.3,
-    years: Math.round(candidateYears * 10) / 10, // Round to 1 decimal place
+    years: Math.round(candidateYears * 10) / 10,
     relevance: relevanceScore,
     insights: `${candidateYears.toFixed(1)} years of experience, ${
       relevanceScore >= 0.7 ? "highly" : "partially"
@@ -147,7 +147,6 @@ const calculateEducationMatch = (job, candidate) => {
 };
 
 const calculateProjectScore = (job, candidate) => {
-  // Combine required and preferred skills, ensure we have arrays
   const relevantTechnologies = [
     ...(job.requiredSkills || []),
     ...(job.preferredSkills || []),
@@ -186,29 +185,6 @@ const calculateProjectScore = (job, candidate) => {
   };
 };
 
-const generateMatchExplanation = ({
-  job,
-  candidateProfile,
-  scores,
-  llmAnalysis,
-}) => {
-  const skillsExplanation = scores.skillsScore.missingSkills.length
-    ? `Candidate matches ${
-        scores.skillsScore.matchedSkills.length
-      } required skills but is missing ${scores.skillsScore.missingSkills.join(
-        ", "
-      )}.`
-    : `Candidate matches all required skills.`;
-
-  const experienceExplanation = `Has ${scores.experienceScore.years} years of ${
-    scores.experienceScore.relevance >= 0.7 ? "relevant" : "related"
-  } experience.`;
-
-  return `${skillsExplanation} ${experienceExplanation} ${
-    llmAnalysis.explanation || ""
-  }`.trim();
-};
-
 // Main export function
 export const calculateMatchScore = async (job, candidateProfile) => {
   try {
@@ -224,31 +200,50 @@ export const calculateMatchScore = async (job, candidateProfile) => {
     // 4. Calculate project relevance
     const projectScore = calculateProjectScore(job, candidateProfile);
 
-    // 5. Get LLM analysis for qualitative matching
-    let llmAnalysis;
-    try {
-      llmAnalysis = await analyzeCandidate(job, candidateProfile);
-    } catch (llmError) {
-      console.error("LLM analysis failed:", llmError);
-      llmAnalysis = {
-        score: 0,
-        strengths: [],
-        weaknesses: [],
-        recommendation: "Unable to perform detailed analysis",
-        confidence: 0,
-      };
-    }
-
-    // Calculate weighted score
-    const algorithmicScore =
-      skillsScore.requiredScore * WEIGHTS.requiredSkills +
+    // Calculate initial algorithmic score
+    let finalScore =
+      skillsScore.requiredScore *
+        (WEIGHTS.requiredSkills + WEIGHTS.llmAnalysis / 2) +
       skillsScore.preferredScore * WEIGHTS.preferredSkills +
       experienceScore.score * WEIGHTS.experience +
       educationScore.score * WEIGHTS.education +
-      projectScore.score * WEIGHTS.projects +
-      (llmAnalysis.score ? llmAnalysis.score / 100 : 0) * WEIGHTS.llmAnalysis;
+      projectScore.score * WEIGHTS.projects;
 
-    // Create the score data
+    // Only try LLM analysis if score is in the middle range (40-80)
+    const baseScore = Math.round(finalScore * 100);
+    let llmAnalysis;
+
+    if (baseScore > 40 && baseScore < 80) {
+      try {
+        llmAnalysis = await analyzeCandidate(job, candidateProfile);
+        // Blend LLM score with algorithmic score
+        finalScore = (baseScore * 0.7 + llmAnalysis.score * 0.3) / 100;
+      } catch (llmError) {
+        console.error("LLM analysis skipped:", llmError);
+        llmAnalysis = {
+          score: baseScore,
+          strengths: [],
+          weaknesses: [],
+          recommendation: "Score based on skills and experience match",
+          confidence: 0.7,
+        };
+      }
+    } else {
+      // For clear matches/non-matches, skip LLM analysis
+      llmAnalysis = {
+        score: baseScore,
+        strengths:
+          baseScore >= 80 ? ["Strong match based on requirements"] : [],
+        weaknesses: baseScore < 40 ? ["Does not meet basic requirements"] : [],
+        recommendation:
+          baseScore >= 80
+            ? "Consider for interview"
+            : "May not be the best fit",
+        confidence: 0.8,
+      };
+    }
+
+    // Create detailed breakdown
     const skillData = {
       matching: skillsScore.matchedSkills,
       missing: skillsScore.missingSkills,
@@ -285,42 +280,9 @@ export const calculateMatchScore = async (job, candidateProfile) => {
       recommendation: llmAnalysis.recommendation || "",
     };
 
-    // Generate detailed breakdown and insights with both old and new property names
-    const breakdown = {
-      // New property names (for jobMatching.test.js)
-      skillMatch: {
-        required: Math.round(skillsScore.requiredScore * 100),
-        preferred: Math.round(skillsScore.preferredScore * 100),
-        missingSkills: skillsScore.missingSkills,
-        total: skillData.score,
-      },
-      experienceMatch: experienceData,
-      educationMatch: educationData,
-      projectMatch: projectData,
-      strengthsAndWeaknesses: strengthsAndWeaknessesData,
-
-      // Old property names (for jobMatchingWorkflow.test.js)
-      skills: skillData,
-      experience: experienceData,
-      education: educationData,
-      projects: projectData,
-
-      // Keep llmInsights for compatibility
-      llmInsights: {
-        score: llmAnalysis.score || 0,
-        confidence: llmAnalysis.confidence || 0,
-        recommendation: llmAnalysis.recommendation || "",
-        strengths: llmAnalysis.strengths || [],
-        gaps: llmAnalysis.weaknesses || [],
-        analysis: llmAnalysis.overallFit || "",
-      },
-    };
-
-    // Calculate final score (0-100)
-    const finalScore = Math.round(algorithmicScore * 100);
-
+    // Return comprehensive results
     return {
-      score: finalScore,
+      score: Math.round(finalScore * 100),
       details: {
         skills: skillsScore,
         experience: experienceScore,
@@ -328,22 +290,46 @@ export const calculateMatchScore = async (job, candidateProfile) => {
         projects: projectScore,
         llmAnalysis,
       },
-      breakdown,
-      explanation: generateMatchExplanation({
-        job,
-        candidateProfile,
-        scores: { skillsScore, experienceScore, educationScore, projectScore },
-        llmAnalysis,
-      }),
+      breakdown: {
+        skillMatch: {
+          required: Math.round(skillsScore.requiredScore * 100),
+          preferred: Math.round(skillsScore.preferredScore * 100),
+          missingSkills: skillsScore.missingSkills,
+          total: skillData.score,
+        },
+        experienceMatch: experienceData,
+        educationMatch: educationData,
+        projectMatch: projectData,
+        strengthsAndWeaknesses: strengthsAndWeaknessesData,
+
+        // Keep older property names for compatibility
+        skills: skillData,
+        experience: experienceData,
+        education: educationData,
+        projects: projectData,
+
+        // Keep llmInsights for compatibility
+        llmInsights: {
+          score: llmAnalysis.score || 0,
+          confidence: llmAnalysis.confidence || 0,
+          recommendation: llmAnalysis.recommendation || "",
+          strengths: llmAnalysis.strengths || [],
+          gaps: llmAnalysis.weaknesses || [],
+          analysis: llmAnalysis.overallFit || "",
+        },
+      },
+      explanation: `${
+        skillsScore.matchedSkills.length > 0
+          ? `Matched ${skillsScore.matchedSkills.length} required skills. `
+          : "No matching required skills found. "
+      }${experienceScore.insights} ${llmAnalysis.explanation || ""}`.trim(),
     };
   } catch (error) {
     console.error("Error calculating match score:", error);
-    // Return a safe fallback with zero scores
     return {
       score: 0,
       details: {},
       breakdown: {
-        // New property names
         skillMatch: { required: 0, preferred: 0, missingSkills: [], total: 0 },
         experienceMatch: {
           score: 0,
@@ -357,27 +343,6 @@ export const calculateMatchScore = async (job, candidateProfile) => {
           strengths: [],
           gaps: [],
           recommendation: "Error calculating strengths and weaknesses",
-        },
-
-        // Old property names
-        skills: { matching: [], missing: [], score: 0 },
-        experience: {
-          score: 0,
-          years: 0,
-          relevance: 0,
-          insights: "Error calculating experience",
-        },
-        education: { score: 0, degreeMatch: false, fieldMatch: false },
-        projects: { score: 0, relevantProjects: [], technologiesUsed: [] },
-
-        // Keep llmInsights
-        llmInsights: {
-          score: 0,
-          confidence: 0,
-          recommendation: "Error in analysis",
-          strengths: [],
-          gaps: [],
-          analysis: "Failed to calculate match score",
         },
       },
       explanation: "Error calculating match score",

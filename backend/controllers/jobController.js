@@ -131,7 +131,7 @@ export const getJobs = asyncHandler(async (req, res) => {
     filter.$or = [
       { title: { $regex: search, $options: "i" } },
       { description: { $regex: search, $options: "i" } },
-      { skills: { $in: [new RegExp(search, "i")] } },
+      { "company.companyName": { $regex: search, $options: "i" } },
     ];
   }
 
@@ -150,13 +150,25 @@ export const getJobs = asyncHandler(async (req, res) => {
   if (skills) {
     filter.skills = { $in: skills.split(",").map((skill) => skill.trim()) };
   }
-
   const total = await Job.countDocuments(filter);
   const jobs = await Job.find(filter)
-    .populate("company", "name companyName companyLogo")
-    .limit(limit)
-    .skip((page - 1) * limit)
+    .populate({
+      path: "company",
+      select: "name email companyName companyLogo companyDescription industry",
+    })
+    .select(
+      "title description location type experience salary skills requirements isActive createdAt"
+    )
+    .limit(parseInt(limit))
+    .skip((parseInt(page) - 1) * parseInt(limit))
     .sort({ createdAt: -1 });
+
+  res.json({
+    jobs,
+    page: parseInt(page),
+    pages: Math.ceil(total / limit),
+    total,
+  });
 
   res.json({
     jobs,
@@ -441,7 +453,7 @@ export const getJobApplications = asyncHandler(async (req, res) => {
  * @route   GET /api/jobs/matching/:resumeId
  * @access  Private
  */
-export const getMatchingJobs = asyncHandler(async (req, res) => {
+export const getMatchingJobsByResumeId = asyncHandler(async (req, res) => {
   try {
     const { resumeId } = req.params;
 
@@ -471,4 +483,121 @@ export const getMatchingJobs = asyncHandler(async (req, res) => {
     console.error("Error finding matching jobs:", error);
     res.status(500).json({ message: "Error finding matching jobs" });
   }
+});
+
+/**
+ * @desc    Get all matching jobs for the current user
+ * @route   GET /api/jobs/matching
+ * @access  Private
+ */
+import { calculateMatchScore } from "../services/enhancedJobMatching.js";
+
+export const getMatchingJobs = asyncHandler(async (req, res) => {
+  try {
+    // Get active jobs
+    const jobs = await Job.find({ isActive: true }).populate(
+      "company",
+      "name companyName"
+    );
+
+    // Get user's resume
+    const resume = await Resume.findOne({
+      user: req.user._id,
+      isDefault: true,
+    });
+
+    if (!resume) {
+      return res.status(404).json({ message: "No default resume found" });
+    } // Process jobs in smaller batches to avoid overwhelming the LLM API
+    const BATCH_SIZE = 3;
+    const matchedJobs = [];
+
+    for (let i = 0; i < jobs.length; i += BATCH_SIZE) {
+      const batch = jobs.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(async (job) => {
+          const matchResult = await calculateMatchScore(job, resume.parsedData);
+          return {
+            jobId: job._id,
+            score: matchResult.score,
+            details: matchResult.details,
+            explanation: matchResult.explanation,
+          };
+        })
+      );
+      matchedJobs.push(...batchResults);
+
+      // Add a small delay between batches if not the last batch
+      if (i + BATCH_SIZE < jobs.length) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+
+    res.json(matchedJobs);
+  } catch (error) {
+    console.error("Error finding matching jobs:", error);
+    res.status(500).json({ message: "Error finding matching jobs" });
+  }
+});
+
+/**
+ * @desc    Get all jobs with pagination and filters
+ * @route   GET /api/jobs
+ * @access  Public
+ */
+export const getAllJobs = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 10, search, location, type, industry } = req.query;
+
+  // Build filter object
+  const filter = { isActive: true };
+
+  // Add search filter
+  if (search) {
+    filter.$or = [
+      { title: { $regex: search, $options: "i" } },
+      { description: { $regex: search, $options: "i" } },
+      { "company.companyName": { $regex: search, $options: "i" } },
+    ];
+  }
+
+  // Add location filter
+  if (location) {
+    filter.location = { $regex: location, $options: "i" };
+  }
+
+  // Add type filter
+  if (type) {
+    filter.type = type;
+  }
+
+  // Add industry filter
+  if (industry) {
+    filter["company.industry"] = industry;
+  }
+
+  // Calculate pagination
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
+  // Get total count for pagination
+  const total = await Job.countDocuments(filter);
+
+  // Fetch jobs with populated company data
+  const jobs = await Job.find(filter)
+    .populate({
+      path: "company",
+      select: "name email companyName companyLogo companyDescription industry",
+    })
+    .select(
+      "title description location type experience salary skills requirements isActive createdAt"
+    )
+    .sort("-createdAt")
+    .skip(skip)
+    .limit(parseInt(limit));
+
+  res.json({
+    jobs,
+    page: parseInt(page),
+    pages: Math.ceil(total / parseInt(limit)),
+    total,
+  });
 });

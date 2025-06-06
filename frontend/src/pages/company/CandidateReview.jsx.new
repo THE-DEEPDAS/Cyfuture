@@ -25,8 +25,9 @@ const CandidateReview = () => {
   const jobId = searchParams.get("job");
 
   const [selectedJob, setSelectedJob] = useState(jobId || "all");
-  const [applications, setApplications] = useState([]);
-  const [jobs, setJobs] = useState([]);
+  // Ensure applications is always an array
+  const [applications, setApplications] = useState(/** @type {Array<{_id: string, candidate: any, job: any, status: string, createdAt: string}>} */[]);
+  const [jobs, setJobs] = useState(/** @type {Array<{_id: string, title: string}>} */[]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedApplication, setSelectedApplication] = useState(null);
@@ -44,49 +45,78 @@ const CandidateReview = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        setError(null);
-
-        // Use Promise.allSettled for better error handling
-        const [jobsResult, applicationsResult, llmResult, scoresResult] = await Promise.allSettled([
+        setError(null);        // Use Promise.allSettled for better error handling        const [jobsResult, applicationsResult, llmResult, scoresResult] = await Promise.allSettled([
           api.get("/api/jobs/company/me"),
           selectedJob !== "all" 
-            ? api.get(`/api/applications/job/${selectedJob}`) 
+            ? api.get(`/api/applications/job/${selectedJob}`)
             : api.get("/api/applications/company"),
           selectedJob !== "all" 
             ? api.get(`/api/applications/job/${selectedJob}/llm-analysis`)
-            : Promise.resolve({ value: { data: { explanations: {} } } }),
+            : Promise.resolve({ data: { explanations: {} } }),
           selectedJob !== "all"
             ? api.get(`/api/applications/job/${selectedJob}/matching-scores`)
-            : Promise.resolve({ value: { data: { scores: {} } } })
+            : Promise.resolve({ data: { scores: {} } })
         ]);
 
-        // Handle results with proper error handling
-        if (jobsResult.status === 'fulfilled') {
+        // Handle results with proper error handling        if (jobsResult.status === 'fulfilled' && Array.isArray(jobsResult.value?.data)) {
           setJobs(jobsResult.value.data);
           if (selectedJob !== "all") {
             const jobDetails = jobsResult.value.data.find(
-              (job) => job._id === selectedJob
+              (job) => job?._id === selectedJob
             );
             if (jobDetails?.shortlistedCandidates) {
               setShortlistedCandidates(jobDetails.shortlistedCandidates);
             }
           }
         } else {
+          setJobs([]);
           toast.error("Failed to fetch jobs");
-        }
-
-        if (applicationsResult.status === 'fulfilled') {
-          setApplications(applicationsResult.value.data);
+        }        if (applicationsResult.status === 'fulfilled') {
+          const responseData = applicationsResult.value?.data;
+          
+          // Initialize applications as an empty array if no valid data
+          if (!responseData) {
+            setApplications([]);
+            return;
+          }
+          
+          // Ensure we have an array of valid application objects
+          if (Array.isArray(responseData)) {
+            const validApplications = responseData.filter(app => 
+              app && 
+              typeof app === 'object' && 
+              app._id && 
+              app.candidate && 
+              app.job
+            );
+            
+            setApplications(validApplications || []);
+            
+            if (validApplications.length < responseData.length) {
+              console.warn('Some applications were filtered out due to invalid data');
+            }
+          } else {
+            console.error('Invalid applications data received:', responseData);
+            setApplications([]);
+            toast.error("Received invalid applications data format");
+          }
         } else {
-          toast.error("Failed to fetch applications");
-        }
-
-        if (llmResult.status === 'fulfilled') {
+          const error = applicationsResult.reason?.response?.data?.message || 
+                       applicationsResult.reason?.message || 
+                       "Failed to fetch applications";
+          console.error('Applications fetch failed:', error);
+          setApplications([]);
+          toast.error(error);
+        }        if (llmResult.status === 'fulfilled' && llmResult.value?.data?.explanations) {
           setLlmExplanations(llmResult.value.data.explanations);
+        } else {
+          setLlmExplanations({});
         }
 
-        if (scoresResult.status === 'fulfilled') {
+        if (scoresResult.status === 'fulfilled' && scoresResult.value?.data?.scores) {
           setMatchingScores(scoresResult.value.data.scores);
+        } else {
+          setMatchingScores({});
         }
       } catch (err) {
         setError(err.response?.data?.message || "Failed to fetch applications");
@@ -153,15 +183,26 @@ const CandidateReview = () => {
         toast.warning(
           `${action} completed with ${successes} successes and ${failures} failures`
         );
-      }
-
-      // Refresh the data
+      }      // Refresh the data
       const freshData = await api.get(
         selectedJob !== "all"
           ? `/api/applications/job/${selectedJob}`
           : "/api/applications/company"
       );
-      setApplications(freshData.data);
+      
+      if (freshData?.data && Array.isArray(freshData.data)) {
+        const validApplications = freshData.data.filter(app => 
+          app && 
+          typeof app === 'object' && 
+          app._id && 
+          app.candidate && 
+          app.job
+        );
+        setApplications(validApplications);
+      } else {
+        setApplications([]);
+        console.error('Received invalid data format after bulk action');
+      }
 
     } catch (err) {
       toast.error(`Failed to ${action} candidates: ${err.message}`);
@@ -169,21 +210,28 @@ const CandidateReview = () => {
       setBulkActionInProgress(false);
       setSelectedCandidates(new Set());
     }
-  };
-
-  // Filter and sort applications
-  const filteredApplications = applications
+  };  // Filter and sort applications with safety checks
+  const safeApplications = Array.isArray(applications) ? applications : [];
+  const filteredApplications = safeApplications
     .filter((app) => {
+      if (!app || typeof app !== 'object') return false;
       if (filterStatus === "all") return true;
-      if (filterStatus === "shortlisted")
-        return shortlistedCandidates.includes(app._id);
+      if (filterStatus === "shortlisted") {
+        return Array.isArray(shortlistedCandidates) && 
+               shortlistedCandidates.includes(app._id);
+      }
       return app.status === filterStatus;
     })
     .sort((a, b) => {
       if (sortBy === "score") {
-        return (matchingScores[b._id] || 0) - (matchingScores[a._id] || 0);
+        const scoreA = matchingScores[a._id];
+        const scoreB = matchingScores[b._id];
+        return (typeof scoreB === 'number' ? scoreB : 0) - 
+               (typeof scoreA === 'number' ? scoreA : 0);
       }
-      return new Date(b.createdAt) - new Date(a.createdAt);
+      const dateA = new Date(a.createdAt).getTime();
+      const dateB = new Date(b.createdAt).getTime();
+      return isNaN(dateB) || isNaN(dateA) ? 0 : dateB - dateA;
     });
 
   const toggleSort = (field) => {
@@ -237,6 +285,13 @@ const CandidateReview = () => {
   return (
     <ErrorBoundary>
       <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Add error handling for missing applications data */}
+        {!Array.isArray(applications) && !loading && (
+          <Message variant="error">
+            Failed to load applications data. Please refresh the page.
+          </Message>
+        )}
+        
         {/* Header Section */}
         <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
           <h1 className="text-2xl font-bold text-white">Candidate Review</h1>

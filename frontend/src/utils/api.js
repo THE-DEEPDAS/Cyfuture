@@ -2,12 +2,29 @@ import axios from "axios";
 
 // Create a custom axios instance
 const api = axios.create({
-  baseURL: "/api", // Use /api as base URL to work with backend routes
+  baseURL: import.meta.env.VITE_BACKEND_URL || "http://localhost:5000/api", // Use environment variable or default
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 30000, // 30 second timeout
+  timeout: 60000, // 60 second timeout
 });
+
+// Add retry interceptor for timeout errors
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    // If the error is a timeout and we haven't retried yet
+    if (error.code === "ECONNABORTED" && !originalRequest._retry) {
+      originalRequest._retry = true;
+      console.log("Retrying request after timeout...");
+      return api(originalRequest);
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 // Add a request interceptor to include authentication token
 api.interceptors.request.use(

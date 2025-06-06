@@ -37,6 +37,7 @@ import CompanyAnalytics from "./pages/company/Analytics.jsx";
 import CandidateAnalysis from "./pages/company/CandidateAnalysis.jsx";
 import NotFoundPage from "./pages/NotFoundPage.jsx";
 import Profile from "./pages/candidate/Profile.jsx";
+import FindJobs from "./pages/candidate/FindJobs.jsx";
 
 // Add FontAwesome icons to library
 library.add(fas, far, fab);
@@ -61,6 +62,7 @@ function App() {
             >
               <Route element={<DashboardLayout type="candidate" />}>
                 <Route index element={<CandidateDashboard />} />
+                <Route path="jobs" element={<FindJobs />} />
                 <Route path="profile" element={<Profile />} />
                 <Route path="resume" element={<ResumeManager />} />
                 <Route path="resume-profile" element={<ResumeProfile />} />

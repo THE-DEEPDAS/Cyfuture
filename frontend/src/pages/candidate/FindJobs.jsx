@@ -1,0 +1,603 @@
+import React, { useState, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { useNavigate } from "react-router-dom";
+import api from "../../../src/utils/api";
+import { selectUserInfo } from "../../../src/slices/authSlice";
+import { toast } from "react-toastify";
+
+const FindJobs = () => {
+  const [jobs, setJobs] = useState([]);
+  const [filteredJobs, setFilteredJobs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filters, setFilters] = useState({
+    location: "",
+    industry: "",
+    remote: "all",
+    skills: [],
+  });
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [applying, setApplying] = useState(false);
+  const [matchScores, setMatchScores] = useState({});
+  const [calculatingMatch, setCalculatingMatch] = useState(false);
+  const [aiMatchingEnabled, setAiMatchingEnabled] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+
+  // Define available filter options
+  const availableFilters = {
+    jobTypes: ["Full-time", "Part-time", "Contract", "Internship", "Remote"],
+    experienceLevels: [
+      "Entry Level",
+      "Mid-Level",
+      "Senior",
+      "Lead",
+      "Executive",
+    ],
+    industries: [
+      "Technology",
+      "Healthcare",
+      "Finance",
+      "Education",
+      "Marketing",
+      "Manufacturing",
+      "Retail",
+      "Consulting",
+      "Media",
+      "Non-profit",
+    ],
+  };
+  const userInfo = useSelector(selectUserInfo);
+
+  // Initialize filters with user skills when userInfo changes
+  useEffect(() => {
+    if (userInfo?.skills?.length > 0) {
+      setFilters((prev) => ({
+        ...prev,
+        skills: Array.from(new Set([...prev.skills, ...userInfo.skills])), // Merge existing and new skills
+      }));
+    }
+  }, [userInfo]);
+
+  // Fetch jobs on component mount and retry if needed
+  useEffect(() => {
+    fetchJobs();
+  }, [retryCount]);
+
+  // Filter jobs when search term or filters change
+  useEffect(() => {
+    if (Array.isArray(jobs)) {
+      filterJobs();
+    }
+  }, [filters, jobs, searchTerm]);
+  const fetchJobs = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get("/jobs");
+      const jobsData = Array.isArray(response.data?.jobs)
+        ? response.data.jobs
+        : response.data || [];
+      console.log("Fetched jobs:", jobsData); // For debugging
+      setJobs(jobsData);
+      setFilteredJobs(jobsData);
+
+      // Only calculate AI matches if enabled
+      if (aiMatchingEnabled && Array.isArray(jobsData)) {
+        setCalculatingMatch(true);
+        try {
+          const resumeResponse = await api.get("/resumes/default");
+          const matchResponse = await api.get("/jobs/matching", {
+            params: { resumeId: resumeResponse.data._id },
+          });
+
+          const matchData = matchResponse.data.reduce((acc, match) => {
+            acc[match.jobId] = match.score;
+            return acc;
+          }, {});
+          setMatchScores(matchData);
+          toast.success("AI matching completed!");
+        } catch (matchError) {
+          console.error("Error fetching job matches:", matchError);
+
+          if (matchError.code === "ECONNABORTED" && retryCount < 3) {
+            toast.info("Retrying AI match calculation...");
+            setTimeout(() => {
+              setRetryCount((prev) => prev + 1);
+            }, 2000);
+          } else {
+            toast.warning(
+              "Unable to calculate AI matches. Using basic matching instead."
+            );
+          }
+        } finally {
+          setCalculatingMatch(false);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching jobs:", error);
+      setJobs([]);
+      setFilteredJobs([]);
+      toast.error(error.response?.data?.message || "Error fetching jobs");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFilterChange = (key, value) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSkillAdd = (skill) => {
+    if (!filters.skills.includes(skill)) {
+      setFilters((prev) => ({
+        ...prev,
+        skills: [...prev.skills, skill],
+      }));
+    }
+  };
+
+  const handleSkillRemove = (skill) => {
+    setFilters((prev) => ({
+      ...prev,
+      skills: prev.skills.filter((s) => s !== skill),
+    }));
+  };
+  const filterJobs = () => {
+    // Return early if jobs is not an array or is empty
+    if (!Array.isArray(jobs)) {
+      setFilteredJobs([]);
+      return;
+    }
+
+    let result = [...jobs];
+
+    // Apply search term filter
+    if (searchTerm) {
+      result = result.filter(
+        (job) =>
+          job.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          job.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          job.description?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // First separate jobs into matching and non-matching based on skills
+    // Use both user profile skills and filter skills
+    const userSkills = new Set([
+      ...(userInfo?.skills || []),
+      ...filters.skills,
+    ]);
+    const [matchingJobs, nonMatchingJobs] = result.reduce(
+      ([matching, nonMatching], job) => {
+        // Skip jobs that don't have requiredSkills
+        if (!Array.isArray(job.requiredSkills)) {
+          nonMatching.push(job);
+          return [matching, nonMatching];
+        }
+
+        const jobSkills = new Set(job.requiredSkills);
+        // Check if any of the job's required skills match the user's skills
+        const hasMatchingSkills = Array.from(jobSkills).some((skill) =>
+          Array.from(userSkills).some(
+            (userSkill) =>
+              userSkill.toLowerCase().includes(skill.toLowerCase()) ||
+              skill.toLowerCase().includes(userSkill.toLowerCase())
+          )
+        );
+
+        if (hasMatchingSkills) {
+          matching.push(job);
+        } else {
+          nonMatching.push(job);
+        }
+        return [matching, nonMatching];
+      },
+      [[], []]
+    );
+
+    // Apply filters with null checks
+    if (filters.location) {
+      result = result.filter((job) =>
+        job.location?.toLowerCase().includes(filters.location.toLowerCase())
+      );
+    }
+    if (filters.jobType) {
+      result = result.filter((job) => job.jobType === filters.jobType);
+    }
+    if (filters.experienceLevel) {
+      result = result.filter(
+        (job) => job.experience?.level === filters.experienceLevel
+      );
+    }
+    if (filters.salaryMin) {
+      result = result.filter(
+        (job) => job.salary?.min >= parseInt(filters.salaryMin)
+      );
+    }
+    if (filters.salaryMax) {
+      result = result.filter(
+        (job) => job.salary?.max <= parseInt(filters.salaryMax)
+      );
+    }
+    if (filters.industry) {
+      result = result.filter((job) => job.industry === filters.industry);
+    }
+    if (filters.remote !== "all") {
+      result = result.filter((job) => job.workType === filters.remote);
+    }
+    if (filters.skills.length > 0) {
+      result = result.filter((job) =>
+        filters.skills.every((skill) =>
+          job.requiredSkills?.some((jobSkill) =>
+            jobSkill.toLowerCase().includes(skill.toLowerCase())
+          )
+        )
+      );
+    }
+
+    // Within each group (matching and non-matching), sort by match score
+    matchingJobs.sort(
+      (a, b) => calculateMatchScore(b) - calculateMatchScore(a)
+    );
+    nonMatchingJobs.sort(
+      (a, b) => calculateMatchScore(b) - calculateMatchScore(a)
+    );
+
+    // Combine the sorted groups, with matching jobs first
+    result = [...matchingJobs, ...nonMatchingJobs];
+
+    setFilteredJobs(result);
+  };
+  const calculateMatchScore = (job) => {
+    // If AI matching is enabled and we have an AI score, use it
+    if (aiMatchingEnabled && matchScores[job._id]) {
+      return matchScores[job._id];
+    }
+
+    // Otherwise calculate basic match score
+    const weights = {
+      skills: 0.35,
+      location: 0.15,
+      experience: 0.2,
+      industry: 0.1,
+      workType: 0.1,
+    };
+
+    let score = 0;
+
+    // Skills match
+    if (filters.skills.length > 0 && Array.isArray(job.requiredSkills)) {
+      const matchedSkills = filters.skills.filter((skill) =>
+        job.requiredSkills.some((jobSkill) =>
+          jobSkill.toLowerCase().includes(skill.toLowerCase())
+        )
+      );
+      score +=
+        (matchedSkills.length / filters.skills.length) * weights.skills * 100;
+    }
+
+    // Location match
+    if (filters.location && job.location) {
+      if (job.location.toLowerCase().includes(filters.location.toLowerCase())) {
+        score += weights.location * 100;
+      }
+    }
+
+    // Industry match
+    if (filters.industry && job.industry) {
+      if (job.industry === filters.industry) {
+        score += weights.industry * 100;
+      }
+    }
+
+    // Work type match
+    if (filters.remote !== "all" && job.workType) {
+      if (job.workType === filters.remote) {
+        score += weights.workType * 100;
+      }
+    }
+    return Math.round(score);
+  };
+
+  const renderMatchScore = (job) => {
+    const score = calculatingMatch ? null : calculateMatchScore(job);
+
+    if (!score) return null;
+
+    let colorClass = "text-red-500";
+    if (score >= 85) colorClass = "text-green-500"; // High match (85%+)
+    else if (score >= 70) colorClass = "text-yellow-500"; // Good match (70-84%)
+    else if (score >= 50) colorClass = "text-orange-500"; // Moderate match (50-69%)
+
+    return (
+      <div className={`text-sm font-semibold ${colorClass}`}>
+        {score}% Match
+      </div>
+    );
+  };
+  // Format salary range with currency
+  const formatSalary = (salaryObj) => {
+    if (!salaryObj || !salaryObj.min || !salaryObj.max || !salaryObj.currency)
+      return null;
+
+    const formatter = new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: salaryObj.currency,
+      maximumFractionDigits: 0,
+    });
+
+    return `${formatter.format(salaryObj.min)} - ${formatter.format(
+      salaryObj.max
+    )}`;
+  };
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex flex-col md:flex-row gap-6">
+        {/* Filters sidebar */}
+        <div className="w-full md:w-1/4 bg-white rounded-lg shadow p-4">
+          <h2 className="text-xl font-bold mb-4">Filters</h2>
+
+          {/* AI Matching Toggle */}
+          <div className="mb-4">
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={aiMatchingEnabled}
+                onChange={(e) => {
+                  setAiMatchingEnabled(e.target.checked);
+                  fetchJobs(); // Refetch jobs with AI matching if enabled
+                }}
+                className="form-checkbox"
+              />
+              <span>Enable AI Matching</span>
+            </label>
+            {calculatingMatch && (
+              <div className="text-sm text-gray-600 mt-1">
+                Calculating AI matches...
+              </div>
+            )}
+          </div>
+
+          {/* Location filter */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Location
+            </label>
+            <input
+              type="text"
+              value={filters.location}
+              onChange={(e) =>
+                setFilters((prev) => ({ ...prev, location: e.target.value }))
+              }
+              className="w-full px-3 py-2 border rounded-md"
+              placeholder="Enter location"
+            />
+          </div>
+
+          {/* Industry filter */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Industry
+            </label>
+            <select
+              value={filters.industry}
+              onChange={(e) =>
+                setFilters((prev) => ({ ...prev, industry: e.target.value }))
+              }
+              className="w-full px-3 py-2 border rounded-md"
+            >
+              <option value="">All Industries</option>
+              {availableFilters.industries.map((industry) => (
+                <option key={industry} value={industry}>
+                  {industry}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Remote work filter */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Work Type
+            </label>
+            <select
+              value={filters.remote}
+              onChange={(e) =>
+                setFilters((prev) => ({ ...prev, remote: e.target.value }))
+              }
+              className="w-full px-3 py-2 border rounded-md"
+            >
+              <option value="all">All Types</option>
+              <option value="remote">Remote</option>
+              <option value="onsite">On-site</option>
+              <option value="hybrid">Hybrid</option>
+            </select>
+          </div>
+
+          {/* Skills filter */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Skills
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {filters.skills.map((skill, index) => (
+                <div
+                  key={index}
+                  className="bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-sm flex items-center"
+                >
+                  {skill}
+                  <button
+                    onClick={() =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        skills: prev.skills.filter((_, i) => i !== index),
+                      }))
+                    }
+                    className="ml-2 text-blue-600 hover:text-blue-800"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <input
+              type="text"
+              placeholder="Add a skill"
+              className="w-full px-3 py-2 border rounded-md mt-2"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.target.value.trim()) {
+                  setFilters((prev) => ({
+                    ...prev,
+                    skills: [...prev.skills, e.target.value.trim()],
+                  }));
+                  e.target.value = "";
+                }
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Jobs list */}
+        <div className="w-full md:w-3/4">
+          {/* Search bar */}
+          <div className="mb-6">
+            <div className="relative">
+              <FontAwesomeIcon
+                icon="search"
+                className="absolute left-3 top-3 text-gray-400"
+              />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 p-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Search jobs by title, company, or keywords..."
+              />
+            </div>
+          </div>{" "}
+          {/* AI Matching Button */}
+          {userInfo && !aiMatchingEnabled && (
+            <div className="mb-6 text-center">
+              <button
+                onClick={() => setAiMatchingEnabled(true)}
+                className="px-6 py-3 bg-primary-600 text-white rounded-lg shadow hover:bg-primary-700 transition-colors flex items-center justify-center gap-2 w-full md:w-auto"
+              >
+                <FontAwesomeIcon icon="robot" />
+                Calculate AI Match Score
+              </button>
+            </div>
+          )}
+          {/* AI Matching Progress */}
+          {calculatingMatch && (
+            <div className="mb-6 flex items-center justify-center gap-3 text-primary-600">
+              <FontAwesomeIcon icon="spinner" spin />
+              <span>Calculating AI match scores...</span>
+            </div>
+          )}
+          {/* Jobs grid */}
+          {loading ? (
+            <div className="flex justify-center items-center h-64">
+              <FontAwesomeIcon
+                icon="spinner"
+                spin
+                size="2x"
+                className="text-blue-500"
+              />
+            </div>
+          ) : filteredJobs.length === 0 ? (
+            <div className="text-center py-8">
+              <FontAwesomeIcon
+                icon="search"
+                className="text-gray-400 text-5xl mb-4"
+              />
+              <h3 className="text-xl font-semibold text-gray-700">
+                No jobs found
+              </h3>
+              <p className="text-gray-500">
+                Try adjusting your search criteria
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6">
+              {filteredJobs.map((job) => (
+                <div
+                  key={job._id}
+                  className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-6"
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-900">
+                        {job.title}
+                      </h3>
+                      <p className="text-gray-600">{job.company.companyName}</p>
+                    </div>
+                    {renderMatchScore(job)}
+                  </div>
+
+                  <div className="mt-2">
+                    <p className="text-gray-700">{job.description}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {job.requiredSkills?.map((skill, index) => (
+                        <span
+                          key={index}
+                          className="bg-gray-100 text-gray-800 px-2 py-1 rounded-md text-sm"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mt-4 flex justify-between items-center">
+                    <div className="text-sm text-gray-600">
+                      <span>{job.location}</span>{" "}
+                      {job.salary && (
+                        <span className="ml-2 pl-2 border-l">
+                          {formatSalary(job.salary)}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleApply(job)}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                    >
+                      Apply Now
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Application Modal */}
+      {applying && selectedJob && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full">
+            <h2 className="text-2xl font-bold mb-4">
+              Apply for {selectedJob.title}
+            </h2>
+            {/* Add application form here */}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setApplying(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApply}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+              >
+                Submit Application
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default FindJobs;

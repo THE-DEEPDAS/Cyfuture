@@ -11,18 +11,19 @@ import {
   matchCandidates,
   getJobApplications,
   getMatchingJobs,
+  getAllJobs,
 } from "../controllers/jobController.js";
 
 const router = express.Router();
 
 // Public routes
-router.route("/").post(protect, company, createJob).get(getJobs);
+router.route("/").post(protect, company, createJob).get(getAllJobs);
 
 // Company routes
 router.route("/company/me").get(protect, company, getCompanyJobs);
 
 // Matching routes
-router.route("/matching/:resumeId").get(protect, getMatchingJobs);
+router.route("/matching").get(protect, getMatchingJobs);
 
 // Job specific routes
 router

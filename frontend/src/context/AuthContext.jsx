@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import { toast } from "react-toastify";
 import api from "../utils/api.js";
+import { setUserInfo, clearUserInfo } from "../slices/authSlice";
 
 // Create context
 const AuthContext = createContext();
@@ -18,9 +20,10 @@ function useAuth() {
 
 // Auth provider component
 const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const [currentUser, setCurrentUser] = useState(null);
 
   console.log("AuthProvider initialized");
 
@@ -41,7 +44,8 @@ const AuthProvider = ({ children }) => {
           console.log("Fetching user data...");
           const { data } = await api.get("/users/me");
           console.log("User data fetched:", data);
-          setUser(data);
+          dispatch(setUserInfo(data));
+          setCurrentUser(data);
         } catch (error) {
           console.error("Auth initialization failed:", error);
           localStorage.removeItem("token");
@@ -65,7 +69,8 @@ const AuthProvider = ({ children }) => {
       localStorage.setItem("token", data.token);
       api.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
 
-      setUser(data.user);
+      dispatch(setUserInfo(data.user));
+      setCurrentUser(data.user);
 
       console.log("User set in state:", data.user);
 
@@ -96,9 +101,10 @@ const AuthProvider = ({ children }) => {
       const { data } = await api.post("/auth/register", userData);
 
       localStorage.setItem("token", data.token);
-      axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
+      api.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
 
-      setUser(data.user);
+      dispatch(setUserInfo(data.user));
+      setCurrentUser(data.user);
 
       toast.success("Registration successful!");
 
@@ -123,20 +129,21 @@ const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem("token");
     delete api.defaults.headers.common["Authorization"];
-    setUser(null);
+    dispatch(clearUserInfo());
+    setCurrentUser(null);
     navigate("/login");
     toast.info("You have been logged out.");
   };
 
   const value = {
-    user,
+    user: currentUser,
     loading,
     login,
     register,
     logout,
-    isAuthenticated: !!user,
-    isCandidate: user?.role === "candidate",
-    isCompany: user?.role === "company",
+    isAuthenticated: !!currentUser,
+    isCandidate: currentUser?.role === "candidate",
+    isCompany: currentUser?.role === "company",
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

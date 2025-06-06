@@ -10,41 +10,29 @@ import { calculateMatchScore } from "../services/enhancedJobMatching.js";
 import { notifyUser } from "../utils/notification.js";
 import asyncHandler from "express-async-handler";
 
-// @desc    Apply for a job
+// @desc    Submit job application
 // @route   POST /api/applications/:jobId
 // @access  Private/Candidate
 export const applyToJob = asyncHandler(async (req, res) => {
   const { jobId } = req.params;
-  const { resumeId, coverLetter, screeningResponses } = req.body;
+  const { resumeId, coverLetter, screeningResponses = [] } = req.body;
 
-  // Check if job exists and is active
-  const job = await Job.findById(jobId);
+  // Validate required fields
+  if (!resumeId) {
+    res.status(400);
+    throw new Error("Please select a resume");
+  }
+
+  // Find job and check if it exists and is active
+  const job = await Job.findById(jobId).populate("company");
   if (!job) {
     res.status(404);
     throw new Error("Job not found");
   }
 
-  if (!job.isActive || new Date(job.expiresAt) < new Date()) {
+  if (!job.isActive) {
     res.status(400);
-    throw new Error("This job posting is no longer active");
-  }
-
-  // Validate screening responses
-  if (job.screeningQuestions?.length > 0) {
-    // Check if all required questions are answered
-    const missingRequired = job.screeningQuestions
-      .filter((q) => q.required)
-      .some(
-        (q) =>
-          !screeningResponses.find(
-            (r) => r.question.toString() === q._id.toString()
-          )
-      );
-
-    if (missingRequired) {
-      res.status(400);
-      throw new Error("Please answer all required screening questions");
-    }
+    throw new Error("This job is no longer accepting applications");
   }
 
   // Check if already applied
@@ -55,145 +43,36 @@ export const applyToJob = asyncHandler(async (req, res) => {
 
   if (existingApplication) {
     res.status(400);
-    throw new Error("You have already applied to this job");
+    throw new Error("You have already applied for this job");
   }
 
   // Find the resume
   const resume = await Resume.findOne({
     _id: resumeId,
     user: req.user._id,
-  }).select("+parsedData");
+  });
 
   if (!resume) {
     res.status(404);
     throw new Error("Resume not found");
   }
 
-  // Create initial messages from responses if any
-  const initialMessages = [];
-
-  if (screeningResponses && Array.isArray(screeningResponses)) {
-    for (const response of screeningResponses) {
-      // Detect language of the user response
-      const language = await detectLanguage(response.answer);
-
-      initialMessages.push({
-        sender: "candidate",
-        content: response.answer,
-        language,
-        createdAt: new Date(),
-      });
-    }
-  }
-
-  // Create the application
+  // Create application
   const application = await Application.create({
     job: jobId,
     candidate: req.user._id,
     resume: resumeId,
     coverLetter,
+    screeningResponses,
     status: "pending",
-    screeningResponses: screeningResponses.map((response) => ({
-      question: response.question,
-      response: response.response,
-    })),
-    messages: initialMessages,
   });
 
-  // Get job and candidate details for analysis
-  const populatedApp = await Application.findById(application._id)
-    .populate("job")
-    .populate("resume");
-
-  // Calculate comprehensive match score
-  const matchResult = await calculateMatchScore(
-    populatedApp.job,
-    populatedApp.resume.parsedData
-  );
-
-  // Update application with detailed match results
-  application.matchScore = matchResult.score;
-  application.matchDetails = {
-    breakdown: matchResult.breakdown,
-    skillsAnalysis: {
-      requiredSkills: matchResult.details.skills.matchedRequired,
-      preferredSkills: matchResult.details.skills.matchedPreferred,
-    },
-    experienceMatch: matchResult.details.experience,
-    educationMatch: matchResult.details.education,
-    projectMatch: matchResult.details.projects,
-  };
-  application.llmRationale = matchResult.explanation;
-
-  // Store additional analysis details if available
-  if (analysis.factorScores) {
-    application.analysisDetails = {
-      factorScores: analysis.factorScores,
-      strengths: analysis.strengths,
-      gaps: analysis.gaps,
-      summary: analysis.summary,
-    };
-  }
-
-  // Add system message with application confirmation
-  application.messages.push({
-    sender: "system",
-    content:
-      "Your application has been submitted successfully. The employer will review your application and get back to you soon.",
-    language: "en",
-    createdAt: new Date(),
-  });
-
-  // Evaluate screening responses with LLM if enabled
-  if (job.llmEvaluation?.enabled) {
-    try {
-      const [screeningEval, overallEval] = await Promise.all([
-        evaluateScreeningResponses(
-          application,
-          job,
-          req.user.preferredLanguage
-        ),
-        generateOverallEvaluation(application, job),
-      ]);
-
-      // Update application with evaluations
-      application.screeningResponses = application.screeningResponses.map(
-        (response) => {
-          const evaluation = screeningEval.responses.find(
-            (r) => r.questionId.toString() === response.question.toString()
-          )?.evaluation;
-
-          if (evaluation) {
-            response.llmEvaluation = {
-              score: evaluation.score,
-              feedback: evaluation.feedback,
-              confidence: evaluation.confidence,
-            };
-          }
-          return response;
-        }
-      );
-
-      application.overallEvaluation = {
-        totalScore: overallEval.totalScore,
-        breakdown: overallEval.breakdown,
-        flags: overallEval.flags,
-        recommendationStrength: overallEval.recommendationStrength,
-      };
-    } catch (error) {
-      console.error("LLM Evaluation Error:", error);
-      // Continue with application submission even if LLM evaluation fails
-    }
-  }
-
-  // Save the application
-  await application.save();
-
-  // Notify the company
-  await notifyUser(job.company, {
+  // Notify company about new application
+  await createNotification({
+    user: job.company._id,
     type: "NEW_APPLICATION",
-    title: `New application for ${job.title}`,
-    message: `${req.user.name} has applied for the ${job.title} position`,
+    title: "New Job Application",
+    message: `${req.user.name} has applied for ${job.title}`,
     reference: {
       type: "Application",
       id: application._id,
@@ -654,7 +533,7 @@ export const toggleShortlist = asyncHandler(async (req, res) => {
   res.json({ shortlisted: application.shortlisted });
 });
 
-// @desc    Get applications for a specific job with matching scores and LLM analysis
+// @desc    Get all applications for a specific job
 // @route   GET /api/applications/job/:jobId
 // @access  Private/Company
 export const getJobApplications = asyncHandler(async (req, res) => {
@@ -662,54 +541,32 @@ export const getJobApplications = asyncHandler(async (req, res) => {
 
   // Find job and verify ownership
   const job = await Job.findById(jobId);
-  if (!job || job.company.toString() !== req.user._id.toString()) {
+  if (!job) {
     res.status(404);
     throw new Error("Job not found");
   }
 
-  // Get all applications for this job
-  const applications = await Application.find({ job: jobId })
-    .populate("candidate", "name email phone")
-    .populate("resume")
-    .sort("-createdAt");
-
-  // Calculate matching scores and get LLM analysis for each application
-  const matchingScores = {};
-  const llmExplanations = {};
-  const shortlistedCandidates = [];
-
-  for (const application of applications) {
-    // Calculate matching score based on skills, experience, etc.
-    const score = await calculateMatchScore(
-      application.resume.parsedData,
-      job.requirements
-    );
-    matchingScores[application._id] = score;
-
-    // Get LLM analysis if not already stored
-    if (!application.llmAnalysis) {
-      const analysis = await analyzeCandidate({
-        resume: application.resume.parsedData,
-        jobDescription: job.description,
-        requirements: job.requirements,
-      });
-
-      application.llmAnalysis = analysis;
-      await application.save();
-    }
-
-    llmExplanations[application._id] = application.llmAnalysis;
-
-    if (application.shortlisted) {
-      shortlistedCandidates.push(application._id);
-    }
+  // Verify company ownership
+  if (job.company.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Not authorized to view these applications");
   }
+
+  // Get applications with populated data
+  const applications = await Application.find({ job: jobId })
+    .populate({
+      path: "candidate",
+      select: "name email phone",
+    })
+    .populate({
+      path: "resume",
+      select: "fileUrl parsedData",
+    })
+    .sort("-createdAt");
 
   res.json({
     applications,
-    matchingScores,
-    llmExplanations,
-    shortlistedCandidates,
+    total: applications.length,
   });
 });
 

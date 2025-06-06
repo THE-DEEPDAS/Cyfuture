@@ -21,7 +21,7 @@ const JobPostings = () => {
     try {
       setLoading(true);
       console.log("Fetching company jobs...");
-      const response = await api.get("/api/jobs/company/me");
+      const response = await api.get("/jobs/company/me");
       console.log("Fetched jobs:", response.data);
       setJobs(response.data);
       setLoading(false);
