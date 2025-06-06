@@ -25,29 +25,23 @@ const calculateSkillsMatch = (requiredSkills, candidateSkills) => {
 
 const calculateExperienceMatchScore = (job, candidate) => {
   const requiredYears = job.experience?.minYears || 0;
-  const candidateYears =
-    candidate.experience?.reduce((total, exp) => {
-      try {
-        const start = new Date(exp.startDate);
-        const end =
-          exp.endDate === "Present" ? new Date() : new Date(exp.endDate);
-        const months =
-          (end.getFullYear() - start.getFullYear()) * 12 +
-          (end.getMonth() - start.getMonth());
-        return total + months / 12;
-      } catch (error) {
-        return total;
-      }
-    }, 0) || 0;
-
+  const candidateYears = candidate.experience?.reduce((total, exp) => {
+    try {
+      const start = new Date(exp.startDate);
+      const end = exp.endDate === "Present" ? new Date() : new Date(exp.endDate);
+      const months = (end.getFullYear() - start.getFullYear()) * 12 + 
+                    (end.getMonth() - start.getMonth());
+      return total + (months / 12);
+    } catch (error) {
+      return total;
+    }
+  }, 0) || 0;
+  
   return Math.min(candidateYears / Math.max(requiredYears, 1), 1);
 };
 
 const internalCalculateMatchScore = (job, candidate) => {
-  const skillsScore = calculateSkillsMatch(
-    job.requiredSkills,
-    candidate.skills
-  );
+  const skillsScore = calculateSkillsMatch(job.requiredSkills, candidate.skills);
   const experienceScore = calculateExperienceMatchScore(job, candidate);
   return Math.round((skillsScore * 0.7 + experienceScore * 0.3) * 100);
 };
@@ -57,39 +51,25 @@ const internalCalculateMatchScore = (job, candidate) => {
  */
 const generateFallbackAnalysis = (job, candidate) => {
   const score = internalCalculateMatchScore(job, candidate);
-  const matchedSkills = (job.requiredSkills || []).filter((skill) =>
-    (candidate.skills || []).some(
-      (candSkill) =>
-        candSkill.toLowerCase().includes(skill.toLowerCase()) ||
-        skill.toLowerCase().includes(candSkill.toLowerCase())
+  const matchedSkills = (job.requiredSkills || []).filter(skill => 
+    (candidate.skills || []).some(candSkill => 
+      candSkill.toLowerCase().includes(skill.toLowerCase()) ||
+      skill.toLowerCase().includes(candSkill.toLowerCase())
     )
   );
 
-  const strengths = matchedSkills.map((skill) => `Strong match in ${skill}`);
-  const gaps = ["Unable to perform detailed analysis"];
-  const recommendation =
-    score >= 70 ? "Consider for interview" : "Review application details";
-
   return {
-    strengths,
-    weaknesses: gaps,
-    overallFit:
-      score >= 70 ? "Good potential match" : "Further evaluation needed",
-    recommendation,
+    strengths: matchedSkills.map(skill => `Strong match in ${skill}`),
+    weaknesses: ["Unable to perform detailed analysis"],
+    overallFit: score >= 70 ? "Good potential match" : "Further evaluation needed",
+    recommendation: score >= 70 ? "Consider for interview" : "Review application details",
     score,
     confidence: 0.5,
     language: "en",
-    strengthsAndWeaknesses: {
-      strengths,
-      gaps,
-      recommendation,
-    },
     suggestedQuestions: [
-      "Can you describe your experience with " +
-        (job.requiredSkills || []).join(", ") +
-        "?",
-      "What projects have you worked on that are relevant to this role?",
-    ],
+      "Can you describe your experience with " + (job.requiredSkills || []).join(", ") + "?",
+      "What projects have you worked on that are relevant to this role?"
+    ]
   };
 };
 
@@ -119,6 +99,13 @@ const analysisTemplates = {
     fitLabel: "Overall Fit",
     recommendationLabel: "Recommendation",
   },
+  es: {
+    instruction: "Analiza la idoneidad de este candidato para el puesto",
+    strengthsLabel: "Puntos Fuertes",
+    weaknessesLabel: "Áreas de Mejora",
+    fitLabel: "Ajuste General",
+    recommendationLabel: "Recomendación",
+  },
   // Add more languages as needed
 };
 
@@ -127,21 +114,19 @@ const analysisTemplates = {
  */
 const formatExperience = (experience = []) => {
   if (!Array.isArray(experience)) return "No experience data available";
-
-  return (
-    experience
-      .filter((exp) => exp && (exp.title || exp.company || exp.description)) // Filter out empty entries
-      .map((exp) => {
-        const title = exp.title || "Role";
-        const company = exp.company || "Company";
-        const startDate = exp.startDate || "Unknown";
-        const endDate = exp.endDate || "Present";
-        const description = exp.description || "No description provided";
-
-        return `${title} at ${company} (${startDate} - ${endDate}): ${description}`;
-      })
-      .join("\n") || "No experience listed"
-  );
+  
+  return experience
+    .filter(exp => exp && (exp.title || exp.company || exp.description)) // Filter out empty entries
+    .map(exp => {
+      const title = exp.title || "Role";
+      const company = exp.company || "Company";
+      const startDate = exp.startDate || "Unknown";
+      const endDate = exp.endDate || "Present";
+      const description = exp.description || "No description provided";
+      
+      return `${title} at ${company} (${startDate} - ${endDate}): ${description}`;
+    })
+    .join("\n") || "No experience listed";
 };
 
 /**
@@ -149,18 +134,16 @@ const formatExperience = (experience = []) => {
  */
 const formatEducation = (education = []) => {
   if (!Array.isArray(education)) return "No education data available";
-
-  return (
-    education
-      .filter((edu) => edu && (edu.degree || edu.institution || edu.field)) // Filter out empty entries
-      .map((edu) => {
-        const degree = edu.degree || "Degree";
-        const institution = edu.institution || "Institution";
-        const field = edu.field ? ` (${edu.field})` : "";
-        return `${degree} from ${institution}${field}`;
-      })
-      .join("\n") || "No education listed"
-  );
+  
+  return education
+    .filter(edu => edu && (edu.degree || edu.institution || edu.field)) // Filter out empty entries
+    .map(edu => {
+      const degree = edu.degree || "Degree";
+      const institution = edu.institution || "Institution";
+      const field = edu.field ? ` (${edu.field})` : "";
+      return `${degree} from ${institution}${field}`;
+    })
+    .join("\n") || "No education listed";
 };
 
 /**
@@ -168,22 +151,16 @@ const formatEducation = (education = []) => {
  */
 const formatProjects = (projects = []) => {
   if (!Array.isArray(projects)) return "No project data available";
-
-  return (
-    projects
-      .filter(
-        (proj) => proj && (proj.name || proj.description || proj.technologies)
-      ) // Filter out empty entries
-      .map((proj) => {
-        const name = proj.name || "Unnamed Project";
-        const tech = proj.technologies
-          ? ` using ${proj.technologies.join(", ")}`
-          : "";
-        const desc = proj.description ? `: ${proj.description}` : "";
-        return `${name}${tech}${desc}`;
-      })
-      .join("\n") || "No projects listed"
-  );
+  
+  return projects
+    .filter(proj => proj && (proj.name || proj.description || proj.technologies)) // Filter out empty entries
+    .map(proj => {
+      const name = proj.name || "Unnamed Project";
+      const tech = proj.technologies ? ` using ${proj.technologies.join(", ")}` : "";
+      const desc = proj.description ? `: ${proj.description}` : "";
+      return `${name}${tech}${desc}`;
+    })
+    .join("\n") || "No projects listed";
 };
 
 /**
@@ -193,7 +170,7 @@ const parseStructuredResponse = (response, template) => {
   try {
     // First attempt: Try parsing by numeric prefixes
     const sections = response.split(/\d\./).filter(Boolean);
-
+    
     // If we don't have enough sections, try alternate parsing strategies
     if (sections.length < 4) {
       // Look for template labels as delimiters
@@ -204,19 +181,12 @@ const parseStructuredResponse = (response, template) => {
     }
 
     // Clean and validate each section
-    const cleanedSections = sections.map((section) => {
+    const cleanedSections = sections.map(section => {
       let cleaned = section.trim();
-
-      // If section contains potential corruption (like "Note:" or "Explanation:"),
+      
+      // If section contains potential corruption (like "Note:" or "Explanation:"), 
       // take only the content before it
-      const corruptionMarkers = [
-        "Note:",
-        "Explanation:",
-        "Summary:",
-        "Additional:",
-        "Remember:",
-        "Important:",
-      ];
+      const corruptionMarkers = ["Note:", "Explanation:", "Summary:", "Additional:", "Remember:", "Important:"];
       for (const marker of corruptionMarkers) {
         const markerIndex = cleaned.indexOf(marker);
         if (markerIndex !== -1) {
@@ -227,7 +197,7 @@ const parseStructuredResponse = (response, template) => {
       // Remove any JSON-like structures or code blocks that might have been added
       cleaned = cleaned.replace(/\{[\s\S]*?\}/g, "").trim();
       cleaned = cleaned.replace(/```[\s\S]*?```/g, "").trim();
-
+      
       return cleaned;
     });
 
@@ -236,7 +206,7 @@ const parseStructuredResponse = (response, template) => {
       strengths: cleanedSections[0] || "No strengths analysis provided",
       weaknesses: cleanedSections[1] || "No weaknesses analysis provided",
       overallFit: cleanedSections[2] || "No overall fit analysis provided",
-      recommendation: cleanedSections[3] || "No recommendation provided",
+      recommendation: cleanedSections[3] || "No recommendation provided"
     };
   } catch (error) {
     console.error("Error parsing LLM response:", error);
@@ -245,7 +215,7 @@ const parseStructuredResponse = (response, template) => {
       strengths: "Error parsing strengths",
       weaknesses: "Error parsing weaknesses",
       overallFit: "Error parsing overall fit",
-      recommendation: "Unable to provide recommendation due to parsing error",
+      recommendation: "Unable to provide recommendation due to parsing error"
     };
   }
 };
@@ -259,69 +229,59 @@ const splitByLabels = (response, template) => {
       template.strengthsLabel,
       template.weaknessesLabel,
       template.fitLabel,
-      template.recommendationLabel,
+      template.recommendationLabel
     ];
-
+    
     let sections = {};
     let lastIndex = 0;
-
+    
     // Find content between each label
     for (let i = 0; i < labels.length; i++) {
       const currentLabel = labels[i];
       const nextLabel = labels[i + 1];
-
+      
       const startIndex = response.indexOf(currentLabel, lastIndex);
       if (startIndex === -1) continue;
-
-      const endIndex = nextLabel
+      
+      const endIndex = nextLabel 
         ? response.indexOf(nextLabel, startIndex + currentLabel.length)
         : response.length;
-
+      
       if (endIndex === -1) continue;
-
+      
       // Extract and clean the content
       let content = response
         .substring(startIndex + currentLabel.length, endIndex)
         .trim();
-
+      
       // Remove any corruption markers
-      const corruptionMarkers = [
-        "Note:",
-        "Explanation:",
-        "Summary:",
-        "Additional:",
-        "Remember:",
-        "Important:",
-      ];
+      const corruptionMarkers = ["Note:", "Explanation:", "Summary:", "Additional:", "Remember:", "Important:"];
       for (const marker of corruptionMarkers) {
         const markerIndex = content.indexOf(marker);
         if (markerIndex !== -1) {
           content = content.substring(0, markerIndex).trim();
         }
       }
-
+      
       // Map the content to the appropriate field
-      if (currentLabel === template.strengthsLabel)
-        sections.strengths = content;
-      if (currentLabel === template.weaknessesLabel)
-        sections.weaknesses = content;
+      if (currentLabel === template.strengthsLabel) sections.strengths = content;
+      if (currentLabel === template.weaknessesLabel) sections.weaknesses = content;
       if (currentLabel === template.fitLabel) sections.overallFit = content;
-      if (currentLabel === template.recommendationLabel)
-        sections.recommendation = content;
-
+      if (currentLabel === template.recommendationLabel) sections.recommendation = content;
+      
       lastIndex = endIndex;
     }
-
+    
     // Only return if we found at least some sections
     if (Object.keys(sections).length > 0) {
       return {
         strengths: sections.strengths || "No strengths analysis provided",
         weaknesses: sections.weaknesses || "No weaknesses analysis provided",
         overallFit: sections.overallFit || "No overall fit analysis provided",
-        recommendation: sections.recommendation || "No recommendation provided",
+        recommendation: sections.recommendation || "No recommendation provided"
       };
     }
-
+    
     return null;
   } catch (error) {
     console.error("Error in label-based parsing:", error);
@@ -336,15 +296,10 @@ const calculateConfidenceScore = (analysis) => {
   try {
     // Start with perfect confidence
     let confidence = 1.0;
-
+    
     // Calculate completeness of each section
-    const sections = [
-      "strengths",
-      "weaknesses",
-      "overallFit",
-      "recommendation",
-    ];
-    sections.forEach((section) => {
+    const sections = ['strengths', 'weaknesses', 'overallFit', 'recommendation'];
+    sections.forEach(section => {
       if (!analysis[section]) {
         confidence -= 0.25; // Deduct 25% for each missing section
       } else {
@@ -370,11 +325,11 @@ const extractSuggestedQuestions = (response) => {
   try {
     // Look for questions in the response (sentences ending with question marks)
     const questions = response.match(/[^.!?]*\?/g) || [];
-
+    
     // Filter and clean up the questions
     return questions
-      .map((q) => q.trim())
-      .filter((q) => q.length > 10) // Filter out very short questions
+      .map(q => q.trim())
+      .filter(q => q.length > 10) // Filter out very short questions
       .slice(0, 5); // Limit to 5 questions
   } catch (error) {
     console.error("Error extracting suggested questions:", error);
@@ -389,37 +344,33 @@ export const analyzeCandidate = async (job, candidateData, language = "en") => {
   try {
     // Validate and normalize input data
     const normalizedJob = {
-      title: job?.title || "",
+      title: job?.title || '',
       requiredSkills: job?.requiredSkills || [],
       requirements: {
         experience: job?.requirements?.experience,
-        education: job?.requirements?.education || {},
+        education: job?.requirements?.education || {}
       },
-      description: job?.description || "",
+      description: job?.description || ''
     };
 
     const normalizedCandidate = {
       skills: candidateData?.skills || [],
       experience: candidateData?.experience || [],
       education: candidateData?.education || [],
-      projects: candidateData?.projects || [],
+      projects: candidateData?.projects || []
     };
 
     const template = analysisTemplates[language] || analysisTemplates.en;
 
-    // Create a structured analysis prompt
+    // Create a structured analysis prompt with normalized data
     const prompt = `
       ${template.instruction}:
 
       JOB REQUIREMENTS:
       Title: ${normalizedJob.title}
       Required Skills: ${normalizedJob.requiredSkills.join(", ")}
-      Experience Needed: ${
-        normalizedJob.requirements.experience || "Not specified"
-      } years
-      Education: ${
-        normalizedJob.requirements.education.level || "Not specified"
-      }
+      Experience Needed: ${normalizedJob.requirements.experience || "Not specified"} years
+      Education: ${normalizedJob.requirements.education.level || "Not specified"}
       
       CANDIDATE PROFILE:
       Skills: ${normalizedCandidate.skills.join(", ")}
@@ -437,34 +388,36 @@ export const analyzeCandidate = async (job, candidateData, language = "en") => {
       If possible, suggest potential interview questions based on any gaps or areas that need clarification.
     `;
 
-    // Get LLM response and parse analysis
-    let response, analysis;
+    // Get LLM response
+    let response;
     try {
       response = await getLLMResponse(prompt);
-      analysis = parseStructuredResponse(response, template);
-      const score = internalCalculateMatchScore(
-        normalizedJob,
-        normalizedCandidate
-      );
-      const confidence = calculateConfidenceScore(analysis);
-
-      // Return analysis with strengthsAndWeaknesses correctly structured
-      return {
-        ...analysis,
-        score,
-        confidence,
-        language: "en",
-        suggestedQuestions: extractSuggestedQuestions(response),
-        strengthsAndWeaknesses: {
-          strengths: analysis.strengths || [],
-          gaps: analysis.weaknesses || [],
-          recommendation: analysis.recommendation || "",
-        },
-      };
-    } catch (error) {
-      console.error("LLM Processing Error:", error);
+    } catch (llmError) {
+      console.error("LLM Response Error:", llmError);
+      // Return fallback analysis based on algorithmic matching
       return generateFallbackAnalysis(normalizedJob, normalizedCandidate);
     }
+
+    // Parse the structured response with error handling
+    let analysis;
+    try {
+      analysis = parseStructuredResponse(response, template);
+    } catch (parseError) {
+      console.error("Response Parsing Error:", parseError);
+      return generateFallbackAnalysis(normalizedJob, normalizedCandidate);
+    }
+
+    const score = internalCalculateMatchScore(normalizedJob, normalizedCandidate);
+    const confidence = calculateConfidenceScore(analysis);
+
+    return {
+      ...analysis,
+      score,
+      confidence,
+      language: 'en',
+      suggestedQuestions: extractSuggestedQuestions(response)
+    };
+
   } catch (error) {
     console.error("LLM Analysis Error:", error);
     return generateFallbackAnalysis(job, candidateData);
@@ -474,11 +427,7 @@ export const analyzeCandidate = async (job, candidateData, language = "en") => {
 /**
  * Generate a chat response for user messages
  */
-export const generateChatResponse = async (
-  context,
-  message,
-  language = "en"
-) => {
+export const generateChatResponse = async (context, message, language = "en") => {
   try {
     const prompt = `
       Context: You are a helpful AI assistant for a job application platform.
@@ -563,11 +512,7 @@ export const localizeJobDescription = async (job, targetLanguage) => {
 /**
  * Evaluate a candidate's screening question responses
  */
-export const evaluateScreeningResponses = async (
-  application,
-  job,
-  language = "en"
-) => {
+export const evaluateScreeningResponses = async (application, job, language = "en") => {
   const template = analysisTemplates[language] || analysisTemplates.en;
   const results = [];
 
@@ -613,11 +558,12 @@ REQUIREMENTS:
       if (evaluation) {
         results.push({
           questionId: question._id,
-          evaluation,
+          evaluation
         });
       } else {
         throw new Error("Failed to extract valid evaluation from LLM response");
       }
+
     } catch (error) {
       console.error(
         `Error evaluating response for question ${question._id}:`,
@@ -631,8 +577,8 @@ REQUIREMENTS:
           feedback: "Error processing response",
           confidence: 0,
           flags: ["evaluation_error"],
-          strengths: [],
-        },
+          strengths: []
+        }
       });
     }
   }
@@ -652,7 +598,7 @@ REQUIREMENTS:
     overallScore,
     confidence:
       results.reduce((acc, r) => acc + (r.evaluation?.confidence || 0), 0) /
-      Math.max(results.length, 1), // Prevent division by zero
+      Math.max(results.length, 1) // Prevent division by zero
   };
 };
 

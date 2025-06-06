@@ -16,5 +16,8 @@
     "concurrently": "^8.2.2",
     "postcss": "^8.5.4",
     "tailwindcss": "^4.1.8"
+  },
+  "dependencies": {
+    "chartjs": "^0.3.24"
   }
 }

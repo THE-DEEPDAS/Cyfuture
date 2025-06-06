@@ -25,6 +25,14 @@ import {
 } from "chart.js";
 import api from "../../utils/api";
 import { useNavigate } from "react-router-dom";
+import {
+  BarChart,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 // Register ChartJS components
 ChartJS.register(
@@ -576,6 +584,233 @@ const CompanyAnalytics = () => {
 
         {/* Analytics content goes here, using the existing chart components */}
         {renderContent()}
+
+        {/* Job Matching Insights - New Section */}
+        {view === "overview" && analytics && (
+          <div className="bg-white p-6 rounded-lg shadow-sm">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">
+              Job Matching Insights
+            </h3>
+
+            {/* Match Score Distribution */}
+            <div className="mb-6">
+              <h4 className="font-medium text-gray-700 mb-3">
+                Match Score Distribution
+              </h4>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart
+                  data={[
+                    {
+                      range: "90-100",
+                      count: analytics.matchScoreDistribution.excellent,
+                    },
+                    {
+                      range: "75-89",
+                      count: analytics.matchScoreDistribution.good,
+                    },
+                    {
+                      range: "60-74",
+                      count: analytics.matchScoreDistribution.fair,
+                    },
+                    {
+                      range: "0-59",
+                      count: analytics.matchScoreDistribution.poor,
+                    },
+                  ]}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2D374D" />
+                  <XAxis dataKey="range" stroke="#9CA3AF" />
+                  <YAxis stroke="#9CA3AF" />
+                  <RechartsTooltip
+                    contentStyle={{
+                      backgroundColor: "#1F2937",
+                      border: "none",
+                      borderRadius: "0.375rem",
+                    }}
+                  />
+                  <Bar dataKey="count" fill="#3B82F6" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Skill Gaps Analysis */}
+            <div className="mb-6">
+              <h4 className="font-medium text-gray-700 mb-3">
+                Skill Gaps Analysis
+              </h4>
+              <div className="grid gap-4">
+                {analytics.skillGaps.slice(0, 5).map(({ skill, count }) => (
+                  <div
+                    key={skill}
+                    className="flex items-center justify-between"
+                  >
+                    <span className="text-gray-300">{skill}</span>
+                    <div className="flex items-center gap-4">
+                      <div className="w-48 bg-gray-700 rounded-full h-2">
+                        <div
+                          className="bg-primary-500 h-2 rounded-full"
+                          style={{
+                            width: `${
+                              (count / analytics.totalApplications) * 100
+                            }%`,
+                          }}
+                        />
+                      </div>
+                      <span className="text-gray-400 w-16 text-right">
+                        {count} apps
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Top Performing Jobs */}
+            <div className="mb-6">
+              <h4 className="font-medium text-gray-700 mb-3">
+                Top Performing Jobs
+              </h4>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-700">
+                  <thead>
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        Job Title
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        Total Apps
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        Qualified
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        Avg. Match
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700">
+                    {analytics.topPerformingJobs.map((job) => (
+                      <tr key={job.jobId} className="hover:bg-gray-800">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
+                          {job.title}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                          {job.totalApplications}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                          {job.qualifiedCandidates}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <span
+                            className={`px-2 py-1 rounded-full ${
+                              job.averageMatchScore >= 75
+                                ? "bg-green-100 text-green-800"
+                                : job.averageMatchScore >= 60
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {job.averageMatchScore}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Application Trends */}
+            <div className="mb-6">
+              <h4 className="font-medium text-gray-700 mb-3">
+                Application Trends
+              </h4>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart
+                  data={analytics.applicationTrends.map((count, index) => ({
+                    day: index + 1,
+                    applications: count,
+                  }))}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2D374D" />
+                  <XAxis dataKey="day" stroke="#9CA3AF" />
+                  <YAxis stroke="#9CA3AF" />
+                  <RechartsTooltip
+                    contentStyle={{
+                      backgroundColor: "#1F2937",
+                      border: "none",
+                      borderRadius: "0.375rem",
+                    }}
+                  />
+                  <Bar dataKey="applications" fill="#3B82F6" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Candidate Quality Metrics */}
+            <div>
+              <h4 className="font-medium text-gray-700 mb-3">
+                Candidate Quality Metrics
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h5 className="text-sm font-medium text-gray-300 mb-2">
+                    Average Match Score
+                  </h5>
+                  <div className="flex items-center gap-4">
+                    <div className="w-full bg-gray-700 rounded-full h-4">
+                      <div
+                        className={`h-4 rounded-full ${
+                          analytics.candidateQualityMetrics.averageMatchScore >=
+                          75
+                            ? "bg-green-500"
+                            : analytics.candidateQualityMetrics
+                                .averageMatchScore >= 60
+                            ? "bg-yellow-500"
+                            : "bg-red-500"
+                        }`}
+                        style={{
+                          width: `${analytics.candidateQualityMetrics.averageMatchScore}%`,
+                        }}
+                      />
+                    </div>
+                    <span className="text-gray-300 w-16 text-right">
+                      {analytics.candidateQualityMetrics.averageMatchScore}%
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <h5 className="text-sm font-medium text-gray-300 mb-2">
+                    Average Experience
+                  </h5>
+                  <p className="text-2xl font-bold text-primary-500">
+                    {analytics.candidateQualityMetrics.averageExperienceYears}{" "}
+                    years
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <h5 className="text-sm font-medium text-gray-300 mb-2">
+                  Most Common Skills
+                </h5>
+                <div className="flex flex-wrap gap-2">
+                  {analytics.candidateQualityMetrics.topSkills.map(
+                    ({ skill, count }) => (
+                      <span
+                        key={skill}
+                        className="px-3 py-1 bg-primary-900/30 text-primary-300 rounded-full text-sm"
+                      >
+                        {skill} ({count})
+                      </span>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

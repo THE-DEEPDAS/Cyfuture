@@ -6,6 +6,7 @@ import {
   generateChatResponse,
   detectLanguage,
 } from "../utils/llm.js";
+import { calculateMatchScore } from "../services/enhancedJobMatching.js";
 import { notifyUser } from "../utils/notification.js";
 import asyncHandler from "express-async-handler";
 
@@ -71,8 +72,8 @@ export const applyToJob = asyncHandler(async (req, res) => {
   // Create initial messages from responses if any
   const initialMessages = [];
 
-  if (responses && Array.isArray(responses)) {
-    for (const response of responses) {
+  if (screeningResponses && Array.isArray(screeningResponses)) {
+    for (const response of screeningResponses) {
       // Detect language of the user response
       const language = await detectLanguage(response.answer);
 
@@ -104,15 +105,25 @@ export const applyToJob = asyncHandler(async (req, res) => {
     .populate("job")
     .populate("resume");
 
-  // Perform LLM analysis
-  const analysis = await analyzeCandidate(
-    populatedApp.job.description,
+  // Calculate comprehensive match score
+  const matchResult = await calculateMatchScore(
+    populatedApp.job,
     populatedApp.resume.parsedData
   );
 
-  // Update application with analysis results
-  application.matchScore = analysis.matchScore;
-  application.llmRationale = analysis.rationale;
+  // Update application with detailed match results
+  application.matchScore = matchResult.score;
+  application.matchDetails = {
+    breakdown: matchResult.breakdown,
+    skillsAnalysis: {
+      requiredSkills: matchResult.details.skills.matchedRequired,
+      preferredSkills: matchResult.details.skills.matchedPreferred,
+    },
+    experienceMatch: matchResult.details.experience,
+    educationMatch: matchResult.details.education,
+    projectMatch: matchResult.details.projects,
+  };
+  application.llmRationale = matchResult.explanation;
 
   // Store additional analysis details if available
   if (analysis.factorScores) {
@@ -669,7 +680,7 @@ export const getJobApplications = asyncHandler(async (req, res) => {
 
   for (const application of applications) {
     // Calculate matching score based on skills, experience, etc.
-    const score = await calculateMatchingScore(
+    const score = await calculateMatchScore(
       application.resume.parsedData,
       job.requirements
     );
@@ -700,99 +711,7 @@ export const getJobApplications = asyncHandler(async (req, res) => {
     llmExplanations,
     shortlistedCandidates,
   });
-}); // Calculate matching score between resume and job requirements
-const calculateMatchingScore = async (resumeData, jobRequirements) => {
-  let score = 0;
-  const weights = {
-    skills: 0.5, // Combined required and preferred skills
-    experience: 0.2, // Years and relevance of experience
-    education: 0.2, // Education match
-    projects: 0.1, // Relevant project experience
-  };
-
-  // Skills matching
-  const candidateSkills = new Set(
-    resumeData.skills?.map((s) => s.toLowerCase()) || []
-  );
-
-  // Get required and preferred skills from job requirements
-  const requiredSkills = new Set(
-    jobRequirements.requiredSkills?.map((s) => s.toLowerCase()) || []
-  );
-  const preferredSkills = new Set(
-    jobRequirements.preferredSkills?.map((s) => s.toLowerCase()) || []
-  );
-
-  // Calculate required skills match (70% of skills weight)
-  const requiredMatch =
-    requiredSkills.size > 0
-      ? Array.from(requiredSkills).filter((skill) => candidateSkills.has(skill))
-          .length / requiredSkills.size
-      : 1; // If no required skills specified, assume full match
-
-  // Calculate preferred skills match (30% of skills weight)
-  const preferredMatch =
-    preferredSkills.size > 0
-      ? Array.from(preferredSkills).filter((skill) =>
-          candidateSkills.has(skill)
-        ).length / preferredSkills.size
-      : 0;
-
-  // Combined skills match score
-  const skillsMatch = requiredMatch * 0.7 + preferredMatch * 0.3;
-
-  // Experience match (years)
-  const experienceMatch = jobRequirements.minExperience
-    ? Math.min(
-        (resumeData.experience?.length || 0) / jobRequirements.minExperience,
-        1
-      )
-    : 1; // If no minimum experience specified, assume full match
-
-  // Education match
-  const educationMatch = !jobRequirements.preferredDegree
-    ? 1 // If no preferred degree specified, assume full match
-    : (resumeData.education || []).some((edu) =>
-        edu.degree
-          ?.toLowerCase()
-          .includes(jobRequirements.preferredDegree.toLowerCase())
-      )
-    ? 1
-    : 0.5;
-
-  // Project match (based on relevant keywords)
-  const projectKeywords = new Set(
-    [
-      ...(jobRequirements.requiredSkills || []),
-      ...(jobRequirements.preferredSkills || []),
-    ].map((s) => s.toLowerCase())
-  );
-
-  const projectMatches = (resumeData.projects || []).filter((project) =>
-    Array.from(projectKeywords).some(
-      (keyword) =>
-        project.description?.toLowerCase().includes(keyword) ||
-        (project.technologies || []).some((tech) =>
-          tech.toLowerCase().includes(keyword)
-        )
-    )
-  ).length;
-
-  const projectMatch = Math.min(projectMatches / 2, 1); // Normalize to max of 1
-
-  // Calculate final skills score combining required and preferred
-  const skillsScore = requiredMatch * 0.7 + preferredMatch * 0.3;
-
-  // Calculate final score
-  score =
-    weights.skills * skillsScore +
-    weights.experience * experienceMatch +
-    weights.education * educationMatch +
-    weights.projects * projectMatch;
-
-  // Return score as percentage
-  return Math.round(Math.min(Math.max(score * 100, 0), 100));
-};
+});
 
 /**
  * @desc    Shortlist a candidate
@@ -928,7 +847,10 @@ export const getMatchingScores = asyncHandler(async (req, res) => {
   for (const application of applications) {
     if (!application.matchingScores) {
       // Calculate scores if not already present
-      const calculatedScores = await calculateMatchingScores(application, job);
+      const calculatedScores = await calculateMatchScore(
+        job,
+        application.resume.parsedData
+      );
       application.matchingScores = calculatedScores;
       await application.save();
     }

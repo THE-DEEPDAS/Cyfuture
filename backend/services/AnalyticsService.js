@@ -2,6 +2,8 @@ import Analytics from "../models/Analytics.js";
 import Job from "../models/Job.js";
 import Application from "../models/Application.js";
 
+import { calculateMatchScore } from "./enhancedJobMatching.js";
+
 class AnalyticsService {
   async calculateHiringFunnelMetrics(companyId, timeRange) {
     const startDate = this.getStartDate(timeRange);
@@ -213,7 +215,6 @@ class AnalyticsService {
       qualityBySource,
     };
   }
-
   async calculateMatchScores(companyId, timeRange) {
     const startDate = this.getStartDate(timeRange);
 
@@ -225,88 +226,163 @@ class AnalyticsService {
         },
       },
       {
-        $group: {
-          _id: null,
-          average: { $avg: "$matchScore" },
-          low: {
-            $sum: {
-              $cond: [{ $lte: ["$matchScore", 50] }, 1, 0],
+        $facet: {
+          overallStats: [
+            {
+              $group: {
+                _id: null,
+                average: { $avg: "$matchScore" },
+                total: { $sum: 1 },
+                low: { $sum: { $cond: [{ $lte: ["$matchScore", 50] }, 1, 0] } },
+                medium: {
+                  $sum: {
+                    $cond: [
+                      {
+                        $and: [
+                          { $gt: ["$matchScore", 50] },
+                          { $lte: ["$matchScore", 75] },
+                        ],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+                high: { $sum: { $cond: [{ $gt: ["$matchScore", 75] }, 1, 0] } },
+              },
             },
-          },
-          medium: {
-            $sum: {
-              $cond: [
-                {
-                  $and: [
-                    { $gt: ["$matchScore", 50] },
-                    { $lte: ["$matchScore", 75] },
+          ],
+          skillBreakdown: [
+            {
+              $lookup: {
+                from: "resumes",
+                localField: "resume",
+                foreignField: "_id",
+                as: "resumeData",
+              },
+            },
+            { $unwind: "$resumeData" },
+            { $unwind: "$resumeData.skills" },
+            {
+              $group: {
+                _id: "$resumeData.skills",
+                count: { $sum: 1 },
+                avgMatchScore: { $avg: "$matchScore" },
+                applications: { $sum: 1 },
+                shortlisted: {
+                  $sum: { $cond: [{ $eq: ["$status", "shortlisted"] }, 1, 0] },
+                },
+              },
+            },
+            {
+              $project: {
+                skill: "$_id",
+                count: 1,
+                avgMatchScore: 1,
+                shortlistRate: {
+                  $multiply: [
+                    { $divide: ["$shortlisted", "$applications"] },
+                    100,
                   ],
                 },
-                1,
-                0,
-              ],
+              },
             },
-          },
-          high: {
-            $sum: {
-              $cond: [{ $gt: ["$matchScore", 75] }, 1, 0],
+            { $sort: { avgMatchScore: -1 } },
+            { $limit: 10 },
+          ],
+          experienceDistribution: [
+            {
+              $lookup: {
+                from: "resumes",
+                localField: "resume",
+                foreignField: "_id",
+                as: "resumeData",
+              },
             },
-          },
+            { $unwind: "$resumeData" },
+            {
+              $group: {
+                _id: "$resumeData.experience.level",
+                count: { $sum: 1 },
+                avgMatchScore: { $avg: "$matchScore" },
+                shortlisted: {
+                  $sum: { $cond: [{ $eq: ["$status", "shortlisted"] }, 1, 0] },
+                },
+              },
+            },
+            {
+              $project: {
+                level: "$_id",
+                count: 1,
+                avgMatchScore: 1,
+                shortlistRate: {
+                  $multiply: [{ $divide: ["$shortlisted", "$count"] }, 100],
+                },
+              },
+            },
+          ],
+          qualityMetrics: [
+            {
+              $group: {
+                _id: null,
+                avgResponseTime: { $avg: "$responseTime" },
+                highQualityMatches: {
+                  $sum: { $cond: [{ $gte: ["$matchScore", 85] }, 1, 0] },
+                },
+                totalApplications: { $sum: 1 },
+                shortlistedRate: {
+                  $avg: { $cond: [{ $eq: ["$status", "shortlisted"] }, 1, 0] },
+                },
+              },
+            },
+          ],
         },
       },
     ];
 
     const [result] = await Application.aggregate(pipeline);
 
-    return (
-      result || {
-        average: 0,
-        distribution: {
-          low: 0,
-          medium: 0,
-          high: 0,
-        },
-      }
-    );
-  }
+    // Transform results
+    const stats = result.overallStats[0] || {
+      average: 0,
+      total: 0,
+      low: 0,
+      medium: 0,
+      high: 0,
+    };
 
-  async calculateLanguageDistribution(companyId, timeRange) {
-    const startDate = this.getStartDate(timeRange);
+    const topSkills = result.skillBreakdown.map((skill) => ({
+      name: skill.skill,
+      count: skill.count,
+      matchRate: Math.round(skill.avgMatchScore),
+      shortlistRate: Math.round(skill.shortlistRate),
+    }));
 
-    const pipeline = [
-      {
-        $match: {
-          company: companyId,
-          createdAt: { $gte: startDate },
-        },
+    const qualityMetrics = result.qualityMetrics[0] || {};
+
+    return {
+      average: Math.round(stats.average * 10) / 10,
+      distribution: {
+        low: Math.round((stats.low / stats.total) * 100),
+        medium: Math.round((stats.medium / stats.total) * 100),
+        high: Math.round((stats.high / stats.total) * 100),
       },
-      {
-        $lookup: {
-          from: "resumes",
-          localField: "resume",
-          foreignField: "_id",
-          as: "resumeData",
-        },
+      skillAnalysis: {
+        topSkills,
+        experienceDistribution: result.experienceDistribution,
       },
-      {
-        $unwind: "$resumeData",
+      qualityMetrics: {
+        avgResponseTime: qualityMetrics.avgResponseTime || 0,
+        highQualityMatchRate: qualityMetrics.totalApplications
+          ? Math.round(
+              (qualityMetrics.highQualityMatches /
+                qualityMetrics.totalApplications) *
+                100
+            )
+          : 0,
+        shortlistedRate: Math.round(qualityMetrics.shortlistedRate * 100) || 0,
       },
-      {
-        $group: {
-          _id: "$resumeData.preferredLanguage",
-          count: { $sum: 1 },
-        },
-      },
-    ];
-
-    const results = await Application.aggregate(pipeline);
-
-    const distribution = {};
-    results.forEach((result) => {
-      distribution[result._id || "en"] = result.count;
-    });
-
-    return distribution;
+    };
   }
 
   getStartDate(timeRange) {
@@ -321,7 +397,7 @@ class AnalyticsService {
       case "year":
         return new Date(now.setFullYear(now.getFullYear() - 1));
       default:
-        return new Date(now.setMonth(now.getMonth() - 1));
+        return new Date(now.setMonth(now.getMonth() - 1)); // Default to last month
     }
   }
 
