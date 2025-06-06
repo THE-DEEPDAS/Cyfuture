@@ -25,7 +25,6 @@ const ResumeManager = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
   const [parsedData, setParsedData] = useState(null);
-  const [successMessage, setSuccessMessage] = useState("");
   const navigate = useNavigate();
 
   // Handle file drop
@@ -110,7 +109,8 @@ const ResumeManager = () => {
         setParsedData(sanitizedParsedData);
         setUploadProgress(100);
         setResumes((prev) => [...prev, newResume]);
-        setSuccessMessage("Resume uploaded and parsed successfully!");
+
+        setError("Resume uploaded successfully!");
       } else {
         throw new Error("Invalid response format from server");
       }
@@ -274,28 +274,6 @@ const ResumeManager = () => {
           }`}
         >
           {error}
-        </div>
-      )}
-      {successMessage && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <FontAwesomeIcon
-                icon={faCheckCircle}
-                className="text-green-600"
-              />
-            </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium text-green-800">
-                LLM parsing successful
-              </p>
-              <p className="mt-1 text-sm text-green-700">
-                Found {parsedData?.skills?.length || 0} skills,{" "}
-                {parsedData?.experience?.length || 0} experiences,{" "}
-                {parsedData?.projects?.length || 0} projects
-              </p>
-            </div>
-          </div>
         </div>
       )}
 

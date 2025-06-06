@@ -13,59 +13,97 @@ const ResumeProfile = () => {
     const fetchResumeData = async () => {
       try {
         setLoading(true);
-        // Try to get data from local storage first
-        const savedData = localStorage.getItem("defaultResumeData");
-        if (savedData) {
-          const parsedSavedData = JSON.parse(savedData);
-          console.log("============ LOCAL STORAGE DATA ============");
-          console.log("Full data:", parsedSavedData);
-          console.log("parsedData:", parsedSavedData?.parsedData);
-          console.log("skills:", parsedSavedData?.parsedData?.skills);
-          console.log("experience:", parsedSavedData?.parsedData?.experience);
-          console.log("projects:", parsedSavedData?.parsedData?.projects);
-          console.log("=========================================");
-          setResumeData(parsedSavedData);
-          setLoading(false);
-        }
-
-        // Then fetch fresh data from API
+        // If resumeId is provided, fetch that specific resume
         let response;
         if (resumeId) {
           response = await axios.get(`/api/resumes/${resumeId}`);
         } else {
+          // Otherwise fetch the default resume or the first one
           response = await axios.get("/api/resumes/default");
         }
 
-        console.log("============ API RESPONSE DATA ============");
-        console.log("Full data:", response.data);
-        console.log("parsedData:", response.data?.parsedData);
-        console.log("skills:", response.data?.parsedData?.skills);
-        console.log("experience:", response.data?.parsedData?.experience);
-        console.log("projects:", response.data?.parsedData?.projects);
-        console.log("=========================================");
+        console.log('Resume API Response:', {
+          fullData: response.data,
+          parsedData: response.data?.parsedData,
+          skills: response.data?.parsedData?.skills,
+          experience: response.data?.parsedData?.experience,
+          projects: response.data?.parsedData?.projects
+        });
 
-        // Update the state and local storage with fresh data
         setResumeData(response.data);
-        localStorage.setItem(
-          "defaultResumeData",
-          JSON.stringify(response.data)
-        );
         setLoading(false);
       } catch (err) {
         console.error("Error fetching resume data:", err);
         setError("Failed to load resume data. Please try again later.");
-
-        // If we haven't already loaded data from local storage
-        if (!resumeData) {
-          const savedData = localStorage.getItem("defaultResumeData");
-          if (savedData) {
-            const parsedSavedData = JSON.parse(savedData);
-            console.log("Fallback data from localStorage:", parsedSavedData);
-            setResumeData(parsedSavedData);
-            setError(null);
-          }
-        }
         setLoading(false);
+
+        // For development/demo purposes, set sample data if API fails
+        setResumeData({
+          title: "Software Developer Resume",
+          parsedData: {
+            skills: [
+              "JavaScript",
+              "React",
+              "Node.js",
+              "TypeScript",
+              "MongoDB",
+              "Express",
+              "HTML/CSS",
+              "GraphQL",
+              "AWS",
+              "Docker",
+            ],
+            experience: [
+              {
+                title: "Senior Frontend Developer",
+                company: "Tech Innovations Inc.",
+                location: "San Francisco, CA",
+                startDate: "2023-01-01",
+                endDate: null, // Current position
+                description:
+                  "Led a team of 5 developers to build a modern React-based application. Implemented state management with Redux and optimized performance to improve load times by 40%.",
+              },
+              {
+                title: "Full Stack Developer",
+                company: "Digital Solutions Co.",
+                location: "Remote",
+                startDate: "2021-03-01",
+                endDate: "2022-12-31",
+                description:
+                  "Developed and maintained multiple client applications using MERN stack. Implemented RESTful APIs and integrated with third-party services.",
+              },
+            ],
+            projects: [
+              {
+                name: "E-commerce Platform",
+                description:
+                  "Built a full-featured e-commerce platform with React, Node.js, and MongoDB. Features include user authentication, product catalog, shopping cart, and payment processing.",
+                technologies: [
+                  "React",
+                  "Node.js",
+                  "Express",
+                  "MongoDB",
+                  "Stripe API",
+                ],
+              },
+              {
+                name: "Task Management System",
+                description:
+                  "Developed a collaborative task management system with real-time updates using Socket.IO and React. Implemented drag-and-drop functionality and user permission system.",
+                technologies: ["React", "Socket.IO", "Express", "PostgreSQL"],
+              },
+            ],
+            education: [
+              {
+                institution: "University of Technology",
+                degree: "Bachelor of Science",
+                field: "Computer Science",
+                startDate: "2017-09-01",
+                endDate: "2021-05-31",
+              },
+            ],
+          },
+        });
       }
     };
 
@@ -86,9 +124,9 @@ const ResumeProfile = () => {
           <FontAwesomeIcon
             icon="spinner"
             spin
-            className="text-4xl text-blue-600 mb-4"
+            className="text-4xl text-primary-500 mb-4"
           />
-          <p className="text-gray-600">Loading resume data...</p>
+          <p className="text-gray-300">Loading resume data...</p>
         </div>
       </div>
     );
@@ -100,13 +138,10 @@ const ResumeProfile = () => {
         <div className="text-center">
           <FontAwesomeIcon
             icon="exclamation-circle"
-            className="text-4xl text-red-600 mb-4"
+            className="text-4xl text-error-500 mb-4"
           />
-          <p className="text-gray-600 mb-4">{error}</p>
-          <Link
-            to="/candidate/resume"
-            className="text-blue-600 hover:text-blue-700"
-          >
+          <p className="text-gray-300 mb-4">{error}</p>
+          <Link to="/candidate/resume" className="btn-primary">
             Go to Resume Manager
           </Link>
         </div>
@@ -115,20 +150,19 @@ const ResumeProfile = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 bg-gray-100">
-      {/* Header section */}
-      <div className="bg-white shadow rounded-lg p-6 mb-8">
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-primary-900 to-background-secondary rounded-lg p-6 shadow-custom-dark">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 mb-2">
+            <h1 className="text-2xl font-bold text-white mb-2">
               Resume Profile
             </h1>
-            <p className="text-gray-600">Extracted data from your resume</p>
+            <p className="text-gray-300">
+              Extracted data from: {resumeData.title}
+            </p>
           </div>
-          <Link
-            to="/candidate/resume"
-            className="text-blue-600 hover:text-blue-700 flex items-center"
-          >
+          <Link to="/candidate/resume" className="btn-secondary">
             <FontAwesomeIcon icon="arrow-left" className="mr-2" />
             Back to Resume Manager
           </Link>
@@ -136,16 +170,17 @@ const ResumeProfile = () => {
       </div>
 
       {/* Skills section */}
-      <div className="bg-white shadow rounded-lg p-6 mb-8">
+      <div className="card">
         <div className="flex items-center mb-4">
-          <FontAwesomeIcon icon="tools" className="text-blue-600 mr-3" />
-          <h2 className="text-xl font-semibold text-gray-800">Skills</h2>
+          <FontAwesomeIcon icon="tools" className="text-primary-500 mr-3" />
+          <h2 className="text-xl font-semibold text-white">Skills</h2>
         </div>
+
         <div className="flex flex-wrap gap-2">
-          {resumeData?.parsedData?.skills?.map((skill, index) => (
+          {resumeData.parsedData.skills.map((skill, index) => (
             <span
               key={index}
-              className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200"
+              className="px-3 py-1 rounded-full bg-primary-900/30 text-primary-300 border border-primary-700/50"
             >
               {skill}
             </span>
@@ -154,223 +189,170 @@ const ResumeProfile = () => {
       </div>
 
       {/* Experience section */}
-      <div className="bg-white shadow rounded-lg p-6 mb-8">
+      <div className="card">
         <div className="flex items-center mb-6">
-          <FontAwesomeIcon icon="briefcase" className="text-blue-600 mr-3" />
-          <h2 className="text-xl font-semibold text-gray-800">
+          <FontAwesomeIcon icon="briefcase" className="text-primary-500 mr-3" />
+          <h2 className="text-xl font-semibold text-white">
             Professional Experience
           </h2>
         </div>
+
         <div className="space-y-6">
-          {console.log(
-            "Rendering experience section, data:",
-            resumeData?.parsedData?.experience
-          )}
-          {(() => {
-            const experienceData = resumeData?.parsedData?.experience;
-            console.log("Experience type:", typeof experienceData);
-
-            if (!experienceData) {
-              console.log("No experience data found");
-              return (
-                <div className="text-center py-4">
-                  <p className="text-gray-600">
-                    No experience data extracted from your resume.
-                  </p>
-                </div>
-              );
-            }
-
-            const expArray = Array.isArray(experienceData)
-              ? experienceData
-              : typeof experienceData === "object"
-              ? [experienceData]
-              : [];
-
-            console.log("Processed experience array:", expArray);
-
-            return expArray.length > 0 ? (
-              expArray.map((exp, index) => {
-                console.log("Processing exp item:", exp, "at index:", index);
-
-                // Handle both object and string formats
-                const expData =
-                  typeof exp === "object" && exp !== null
-                    ? exp
-                    : { title: exp };
-
-                const {
-                  title = "",
-                  company = "",
-                  location = "",
-                  description = "",
-                  startDate = "",
-                  endDate = "",
-                } = expData;
-
-                return (
-                  <div
-                    key={index}
-                    className="border-b last:border-0 pb-4 last:pb-0"
-                  >
-                    <h3 className="font-semibold text-lg">{title}</h3>
-                    {company && <p className="text-gray-600 mt-1">{company}</p>}
-                    {location && (
-                      <p className="text-gray-500 text-sm">{location}</p>
-                    )}
-                    {(startDate || endDate) && (
-                      <p className="text-gray-500 text-sm mt-1">
-                        {startDate}
-                        {endDate ? ` - ${endDate}` : " - Present"}
-                      </p>
-                    )}
-                    {description && (
-                      <p className="mt-2 text-gray-700">{description}</p>
-                    )}
+          {Array.isArray(resumeData?.parsedData?.experience) ? (
+            resumeData.parsedData.experience.length > 0 ? (
+              resumeData.parsedData.experience.map((exp, index) => (
+                <div
+                  key={index}
+                  className="border-l-2 border-primary-700 pl-4 pb-6 last:pb-0"
+                >
+                  <div className="flex justify-between items-start">
+                    <h3 className="text-lg font-medium text-white">
+                      {exp.title || "Position"}
+                    </h3>
+                    <span className="text-sm text-gray-400">
+                      {formatDate(exp.startDate)} - {formatDate(exp.endDate)}
+                    </span>
                   </div>
-                );
-              })
+                  <p className="text-primary-300 mb-2">
+                    {exp.company}
+                    {exp.location ? `, ${exp.location}` : ""}
+                  </p>
+                  {exp.description && (
+                    <p className="text-gray-300">{exp.description}</p>
+                  )}
+                </div>
+              ))
             ) : (
               <div className="text-center py-4">
-                <p className="text-gray-600">
+                <p className="text-gray-400">
                   No experience data extracted from your resume.
                 </p>
               </div>
-            );
-          })()}
-        </div>
-      </div>
-
-      {/* Projects section */}
-      <div className="bg-white shadow rounded-lg p-6 mb-8">
-        <div className="flex items-center mb-6">
-          <FontAwesomeIcon icon="code" className="text-blue-600 mr-3" />
-          <h2 className="text-xl font-semibold text-gray-800">Projects</h2>
-        </div>
-        <div className="space-y-6">
-          {console.log(
-            "Rendering projects section, data:",
-            resumeData?.parsedData?.projects
-          )}
-          {(() => {
-            const projectsData = resumeData?.parsedData?.projects;
-            console.log("Projects type:", typeof projectsData);
-
-            if (!projectsData) {
-              console.log("No projects data found");
-              return (
-                <div className="text-center py-4">
-                  <p className="text-gray-600">
-                    No project data extracted from your resume.
-                  </p>
-                </div>
-              );
-            }
-
-            const projArray = Array.isArray(projectsData)
-              ? projectsData
-              : typeof projectsData === "object"
-              ? [projectsData]
-              : [];
-
-            console.log("Processed projects array:", projArray);
-
-            return projArray.length > 0 ? (
-              projArray.map((project, index) => {
-                console.log(
-                  "Processing project item:",
-                  project,
-                  "at index:",
-                  index
-                );
-
-                // Handle both object and string formats
-                const projectData =
-                  typeof project === "object" && project !== null
-                    ? project
-                    : { name: project };
-
-                const {
-                  name = "",
-                  description = "",
-                  technologies = [],
-                  url = "",
-                } = projectData;
-
-                return (
-                  <div
-                    key={index}
-                    className="border-b last:border-0 pb-4 last:pb-0"
-                  >
-                    <h3 className="font-semibold text-lg">{name}</h3>
-                    {description && (
-                      <p className="mt-2 text-gray-700">{description}</p>
-                    )}
-                    {Array.isArray(technologies) && technologies.length > 0 && (
-                      <div className="mt-2">
-                        <p className="text-sm text-gray-600">
-                          Technologies: {technologies.join(", ")}
-                        </p>
-                      </div>
-                    )}
-                    {url && (
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 text-sm inline-block mt-2"
-                      >
-                        Project Link
-                      </a>
-                    )}
-                  </div>
-                );
-              })
-            ) : (
-              <div className="text-center py-4">
-                <p className="text-gray-600">
-                  No project data extracted from your resume.
-                </p>
-              </div>
-            );
-          })()}
-        </div>
-      </div>
-
-      {/* Education section */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <div className="flex items-center mb-6">
-          <FontAwesomeIcon
-            icon="graduation-cap"
-            className="text-blue-600 mr-3"
-          />
-          <h2 className="text-xl font-semibold text-gray-800">Education</h2>
-        </div>
-        <div className="space-y-4">
-          {resumeData?.parsedData?.education?.map((edu, index) => (
-            <div
-              key={index}
-              className="flex flex-col md:flex-row md:justify-between"
-            >
-              <div>
-                <h3 className="font-medium text-gray-800">
-                  {edu.degree} in {edu.field}
-                </h3>
-                <p className="text-gray-600">{edu.institution}</p>
-              </div>
-              <div className="text-sm text-gray-600 md:ml-4 whitespace-nowrap">
-                {formatDate(edu.startDate)} - {formatDate(edu.endDate)}
-              </div>
-            </div>
-          ))}
-          {!resumeData?.parsedData?.education?.length && (
+            )
+          ) : (
             <div className="text-center py-4">
-              <p className="text-gray-600">
-                No education data extracted from your resume.
+              <p className="text-gray-400">
+                Experience data format is invalid.
               </p>
             </div>
           )}
         </div>
+      </div>
+
+      {/* Projects section */}
+      <div className="card">
+        <div className="flex items-center mb-6">
+          <FontAwesomeIcon icon="code" className="text-primary-500 mr-3" />
+          <h2 className="text-xl font-semibold text-white">Projects</h2>
+        </div>
+
+        <div className="space-y-6">
+          {Array.isArray(resumeData?.parsedData?.projects) ? (
+            resumeData.parsedData.projects.length > 0 ? (
+              resumeData.parsedData.projects.map((project, index) => (
+                <div key={index} className="bg-background-secondary rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-white mb-2">
+                    {project.name || 'Project'}
+                  </h3>
+                  {project.description && (
+                    <p className="text-gray-300 mb-3">{project.description}</p>
+                  )}
+
+                  {Array.isArray(project.technologies) && project.technologies.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {project.technologies.map((tech, techIndex) => (
+                        <span
+                          key={techIndex}
+                          className="px-2 py-0.5 text-xs rounded-full bg-primary-800/30 text-primary-300"
+                        >
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {project.url && (
+                    <a
+                      href={project.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-block text-primary-400 hover:text-primary-300 transition-colors"
+                    >
+                      <FontAwesomeIcon icon="external-link-alt" className="mr-1" />
+                      View Project
+                    </a>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-gray-400">
+                  No project data extracted from your resume.
+                </p>
+              </div>
+            )
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-gray-400">
+                Project data format is invalid.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Education section (if available) */}
+      {resumeData.parsedData.education &&
+        resumeData.parsedData.education.length > 0 && (
+          <div className="card">
+            <div className="flex items-center mb-6">
+              <FontAwesomeIcon
+                icon="graduation-cap"
+                className="text-primary-500 mr-3"
+              />
+              <h2 className="text-xl font-semibold text-white">Education</h2>
+            </div>
+
+            <div className="space-y-4">
+              {resumeData.parsedData.education.map((edu, index) => (
+                <div key={index} className="flex justify-between">
+                  <div>
+                    <h3 className="font-medium text-white">
+                      {edu.degree} in {edu.field}
+                    </h3>
+                    <p className="text-primary-300">{edu.institution}</p>
+                  </div>
+                  <span className="text-sm text-gray-400">
+                    {formatDate(edu.startDate)} - {formatDate(edu.endDate)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+      {/* Match rate info with job requirements */}
+      <div className="card">
+        <div className="flex items-center mb-4">
+          <FontAwesomeIcon
+            icon="percentage"
+            className="text-primary-500 mr-3"
+          />
+          <h2 className="text-xl font-semibold text-white">Job Match Rate</h2>
+        </div>
+
+        <p className="text-gray-300 mb-4">
+          Our system analyzes your resume data against job requirements to
+          calculate a match score for each job posting.
+        </p>
+
+        <Link
+          to="/candidate/jobs"
+          className="btn-primary inline-flex items-center"
+        >
+          <FontAwesomeIcon icon="search" className="mr-2" />
+          View Matching Jobs
+        </Link>
       </div>
     </div>
   );

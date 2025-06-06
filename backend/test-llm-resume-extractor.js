@@ -1,11 +1,11 @@
 /**
  * Test file for the LLM Resume Extractor
- *
+ * 
  * This file tests the LLM-based resume parsing functionality.
  * It sends a sample resume text to the LLM and logs the extracted data.
  */
 
-import { parseResumeWithLLM } from "./services/llmResumeExtractor.js";
+import { parseResumeWithLLM } from './services/llmResumeExtractor.js';
 
 // Sample resume text for testing
 const sampleResumeText = `
@@ -54,28 +54,28 @@ Bachelor of Science in Computer Science | University of Technology | 2014 - 2018
 
 // Test the LLM-based resume parser
 async function testLLMResumeParser() {
-  console.log("Testing LLM-based resume parser...");
-
+  console.log('Testing LLM-based resume parser...');
+  
   try {
     // Parse the sample resume text using LLM
     const parsedData = await parseResumeWithLLM(sampleResumeText);
-
+    
     // Log the parsed data
-    console.log("\nParsed Resume Data:");
-    console.log("Skills:", parsedData.skills);
-    console.log("\nExperience:");
+    console.log('\nParsed Resume Data:');
+    console.log('Skills:', parsedData.skills);
+    console.log('\nExperience:');
     parsedData.experience.forEach((exp, index) => {
       console.log(`[${index + 1}] ${exp}`);
     });
-
-    console.log("\nProjects:");
+    
+    console.log('\nProjects:');
     parsedData.projects.forEach((proj, index) => {
       console.log(`[${index + 1}] ${proj}`);
     });
-
-    console.log("\nParsing completed successfully!");
+    
+    console.log('\nParsing completed successfully!');
   } catch (error) {
-    console.error("Error in LLM resume parsing test:", error);
+    console.error('Error in LLM resume parsing test:', error);
   }
 }
 

@@ -297,52 +297,71 @@ export const evaluateScreeningResponses = async (
 
     if (!question) continue;
 
-    const prompt = `
-      As an AI recruiter, evaluate this candidate's response to a job screening question.
+    const prompt = `You are an AI evaluator that must output only valid JSON.
+IMPORTANT: Your entire response must be a single valid JSON object with no additional text, comments, or explanations.
 
-      JOB POSITION: ${job.title}
+Evaluate this candidate's response to a job screening question:
 
-      SCREENING QUESTION: "${question.question}"
-      CANDIDATE'S RESPONSE: "${response.response}"
+Input Data:
+- Job Position: "${job.title}"
+- Question: "${question.question}"
+- Response: "${response.response}"
 
-      Please evaluate the response considering:
-      1. Relevance to the question
-      2. Completeness of the answer
-      3. Professional communication
-      4. Specific examples or details provided
-      5. Alignment with job requirements
+INSTRUCTIONS:
+Evaluate the response and output a JSON object with exactly these fields:
+{
+  "score": number between 0-100,
+  "feedback": string with evaluation feedback,
+  "confidence": number between 0-1,
+  "flags": array of strings for concerns,
+  "strengths": array of strings for positive points
+}
 
-      Provide:
-      1. A score from 0-100
-      2. Specific feedback about the response
-      3. Your confidence level in this evaluation (0-1)
-      4. Any red flags or notable strengths
-
-      Format your response as JSON with the following structure:
-      {
-        "score": number,
-        "feedback": "detailed feedback",
-        "confidence": number,
-        "flags": ["flag1", "flag2"],
-        "strengths": ["strength1", "strength2"]
-      }
-    `;
+REQUIREMENTS:
+- Output must be parseable JSON
+- Do not include any text before or after the JSON
+- Do not include any explanations or comments
+- All fields must be present`;
 
     try {
-      const result = await model.generateContent(prompt);
-      const response = await result.response.text();
-      const evaluation = JSON.parse(response);
-
-      results.push({
-        questionId: question._id,
-        evaluation: {
-          score: evaluation.score,
-          feedback: evaluation.feedback,
-          confidence: evaluation.confidence,
-          flags: evaluation.flags,
-          strengths: evaluation.strengths,
-        },
-      });
+      const result = await getLLMResponse(prompt);
+      
+      // Extract JSON from the response by finding the first { and last }
+      const jsonStart = result.indexOf('{');
+      const jsonEnd = result.lastIndexOf('}') + 1;
+      const jsonStr = result.slice(jsonStart, jsonEnd);
+      
+      try {
+        const evaluation = JSON.parse(jsonStr);
+        
+        // Validate required fields
+        const requiredFields = ['score', 'feedback', 'confidence', 'flags', 'strengths'];
+        const missingFields = requiredFields.filter(field => !(field in evaluation));
+        
+        if (missingFields.length > 0) {
+          throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+        }
+        
+        // Ensure score and confidence are in valid ranges
+        evaluation.score = Math.max(0, Math.min(100, evaluation.score));
+        evaluation.confidence = Math.max(0, Math.min(1, evaluation.confidence));
+        
+        results.push({
+          questionId: question._id,
+          evaluation: {
+            score: evaluation.score,
+            feedback: evaluation.feedback,
+            confidence: evaluation.confidence,
+            flags: evaluation.flags,
+            strengths: evaluation.strengths,
+          },
+        });
+      } catch (parseError) {
+        console.error('JSON Parse Error:', parseError);
+        console.error('Raw Response:', result);
+        console.error('Attempted JSON:', jsonStr);
+        throw new Error('Failed to parse LLM response as JSON');
+      }
     } catch (error) {
       console.error(
         `Error evaluating response for question ${question._id}:`,
