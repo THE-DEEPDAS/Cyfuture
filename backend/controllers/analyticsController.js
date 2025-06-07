@@ -1,7 +1,71 @@
 import asyncHandler from "express-async-handler";
 import analyticsService from "../services/AnalyticsService.js";
+import Job from "../models/Job.js";
+import Application from "../models/Application.js";
+import mongoose from "mongoose";
 
-// @desc    Get company hiring funnel metrics
+// @desc    Get comprehensive dashboard analytics data
+// @route   GET /api/analytics/dashboard
+// @access  Private/Company
+export const getDashboardAnalytics = asyncHandler(async (req, res) => {
+  const { timeRange = "month" } = req.query;
+
+  const [
+    hiringFunnel,
+    timeToHire,
+    sourceAnalytics,
+    matchScores,
+    languageDistribution,
+  ] = await Promise.all([
+    analyticsService.calculateHiringFunnelMetrics(req.user._id, timeRange),
+    analyticsService.calculateTimeToHireMetrics(req.user._id, timeRange),
+    analyticsService.calculateSourceAnalytics(req.user._id, timeRange),
+    analyticsService.calculateMatchScores(req.user._id, timeRange),
+    analyticsService.calculateLanguageDistribution(req.user._id, timeRange),
+  ]);
+
+  // Save analytics data for historical tracking
+  await analyticsService.saveAnalytics({
+    company: req.user._id,
+    timeRange,
+    hiringFunnel,
+    timeToHire,
+    sourceAnalytics,
+    matchScores,
+    languageDistribution,
+  });
+
+  res.json({
+    hiringFunnel,
+    timeToHire,
+    sourceAnalytics,
+    matchScores,
+    languageDistribution,
+  });
+});
+
+// @desc    Get application insights for a specific job
+// @route   GET /api/analytics/job/:jobId
+// @access  Private/Company
+export const getJobAnalytics = asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+  const { timeRange = "month" } = req.query;
+
+  const jobAnalytics = await analyticsService.calculateJobMetrics(
+    jobId,
+    req.user._id,
+    timeRange
+  );
+
+  if (!jobAnalytics) {
+    res.status(404);
+    throw new Error("Job analytics not found");
+  }
+
+  res.json(jobAnalytics);
+});
+
+// @desc    Get company's hiring funnel metrics
 // @route   GET /api/analytics/hiring-funnel
 // @access  Private/Company
 export const getHiringFunnelMetrics = asyncHandler(async (req, res) => {
@@ -61,113 +125,62 @@ export const getLanguageDistribution = asyncHandler(async (req, res) => {
   res.json(distribution);
 });
 
-// @desc    Get comprehensive analytics dashboard data
-// @route   GET /api/analytics/dashboard
+// @desc    Get dashboard metrics
+// @route   GET /api/analytics/dashboard-metrics/:companyId
 // @access  Private/Company
-export const getDashboardAnalytics = asyncHandler(async (req, res) => {
-  const { timeRange = "month" } = req.query;
+export const getDashboardMetrics = asyncHandler(async (req, res) => {
+  try {
+    const { companyId } = req.params;
 
-  const [
-    hiringFunnel,
-    timeToHire,
-    sourceAnalytics,
-    matchScores,
-    languageDistribution,
-  ] = await Promise.all([
-    analyticsService.calculateHiringFunnelMetrics(req.user._id, timeRange),
-    analyticsService.calculateTimeToHireMetrics(req.user._id, timeRange),
-    analyticsService.calculateSourceAnalytics(req.user._id, timeRange),
-    analyticsService.calculateMatchScores(req.user._id, timeRange),
-    analyticsService.calculateLanguageDistribution(req.user._id, timeRange),
-  ]);
+    // Count total and active jobs
+    const totalJobs = await Job.countDocuments({
+      company: new mongoose.Types.ObjectId(companyId),
+    });
 
-  // Save analytics data for historical tracking
-  await analyticsService.saveAnalytics({
-    company: req.user._id,
-    timeRange,
-    hiringFunnel,
-    timeToHire,
-    sourceAnalytics,
-    matchScores: {
-      average: matchScores.average,
-      distribution: matchScores.distribution,
-    },
-    languageDistribution,
-  });
+    const activeJobs = await Job.countDocuments({
+      company: new mongoose.Types.ObjectId(companyId),
+      isActive: true,
+    });
 
-  res.json({
-    hiringFunnel,
-    timeToHire,
-    sourceAnalytics,
-    matchScores,
-    languageDistribution,
-  });
-});
+    // Get application status counts
+    const applicationStats = await Application.aggregate([
+      {
+        $match: {
+          company: new mongoose.Types.ObjectId(companyId),
+        },
+      },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
 
-/**
- * @desc    Get application insights for a specific job
- * @route   GET /api/analytics/job/:jobId
- * @access  Private/Company
- */
-export const getJobAnalytics = asyncHandler(async (req, res) => {
-  const { jobId } = req.params;
+    // Format application counts by status
+    const statusCounts = {};
+    let totalApplications = 0;
 
-  // Find the job
-  const job = await Job.findById(jobId);
+    applicationStats.forEach((stat) => {
+      statusCounts[stat._id || "unknown"] = stat.count;
+      totalApplications += stat.count;
+    });
 
-  if (!job) {
-    res.status(404);
-    throw new Error("Job not found");
+    res.status(200).json({
+      success: true,
+      data: {
+        totalJobs,
+        activeJobs,
+        totalApplications,
+        applicationsByStatus: statusCounts,
+      },
+    });
+  } catch (error) {
+    console.error("Dashboard metrics error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch dashboard metrics",
+      error: error.message,
+    });
   }
-
-  // Check if the user is the company that posted the job
-  if (job.company.toString() !== req.user._id.toString()) {
-    res.status(403);
-    throw new Error("Not authorized to view analytics for this job");
-  }
-
-  // Get all applications for this job
-  const applications = await Application.find({ job: jobId });
-
-  // Basic stats
-  const stats = {
-    total: applications.length,
-    pending: applications.filter((app) => app.status === "pending").length,
-    reviewing: applications.filter((app) => app.status === "reviewing").length,
-    shortlisted: applications.filter((app) => app.status === "shortlisted")
-      .length,
-    rejected: applications.filter((app) => app.status === "rejected").length,
-    hired: applications.filter((app) => app.status === "hired").length,
-  };
-
-  // Calculate average match score
-  let avgMatchScore = 0;
-  const scoredApplications = applications.filter((app) => app.matchScore);
-
-  if (scoredApplications.length > 0) {
-    const totalScore = scoredApplications.reduce(
-      (sum, app) => sum + app.matchScore,
-      0
-    );
-    avgMatchScore = Math.round(totalScore / scoredApplications.length);
-  }
-
-  // Get top skills from high-scoring candidates
-  const topCandidates = applications
-    .filter((app) => app.matchScore >= 80)
-    .slice(0, 5);
-
-  // Return the analytics data
-  res.json({
-    jobDetails: {
-      title: job.title,
-      location: job.location,
-      type: job.type,
-      isActive: job.isActive,
-      expiresAt: job.expiresAt,
-    },
-    stats,
-    avgMatchScore,
-    topCandidatesCount: topCandidates.length,
-  });
 });

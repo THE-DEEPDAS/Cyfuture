@@ -253,12 +253,14 @@ export const deleteJob = asyncHandler(async (req, res) => {
  * @route   GET /api/jobs/company/me
  * @access  Private/Company
  */
+/*
 export const getCompanyJobs = asyncHandler(async (req, res) => {
   const jobs = await Job.find({ company: req.user._id }).sort({
     createdAt: -1,
   });
   res.json(jobs);
 });
+*/
 
 /**
  * @desc    Match candidates for a job
@@ -660,4 +662,28 @@ export const analyzeResponses = asyncHandler(async (req, res) => {
       recommendation: analysis.recommendation,
     },
   });
+});
+
+/**
+ * @desc    Get company's jobs
+ * @route   GET /api/jobs/company/me
+ * @access  Private/Company
+ */
+export const getCompanyJobs = asyncHandler(async (req, res) => {
+  const jobs = await Job.find({ company: req.user._id }).sort({
+    createdAt: -1,
+  });
+
+  // Enhance jobs with applicant counts
+  const jobsWithApplicantCounts = await Promise.all(
+    jobs.map(async (job) => {
+      const applicantCount = await Application.countDocuments({ job: job._id });
+      return {
+        ...job.toObject(),
+        applicants: applicantCount, // Add the dynamic applicant count
+      };
+    })
+  );
+
+  res.json(jobsWithApplicantCounts);
 });

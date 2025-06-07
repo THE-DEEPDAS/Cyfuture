@@ -120,6 +120,63 @@ const CompanyAnalytics = () => {
   const [selectedJob, setSelectedJob] = useState("all");
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch all required analytics data
+        const [dashboardResponse, jobsResponse] = await Promise.all([
+          api.get("/api/analytics/dashboard", {
+            params: { timeRange: timeframe },
+          }),
+          api.get("/api/jobs/active"),
+        ]);
+
+        if (!dashboardResponse.data) {
+          throw new Error("Invalid analytics data received");
+        }
+
+        setAnalytics(dashboardResponse.data);
+        setJobPostings(jobsResponse.data || []);
+      } catch (error) {
+        console.error("Error fetching analytics data:", error);
+        setError("Failed to load analytics data. Please try again later.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [timeframe, selectedJob]);
+
+  // Watch for job selection changes
+  useEffect(() => {
+    const fetchJobAnalytics = async () => {
+      if (selectedJob === "all") return;
+      try {
+        setLoading(true);
+        const response = await api.get(`/api/analytics/job/${selectedJob}`, {
+          params: { timeRange: timeframe },
+        });
+
+        setAnalytics((prev) => ({
+          ...prev,
+          jobAnalytics: response.data,
+        }));
+      } catch (error) {
+        console.error("Error fetching job analytics:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (selectedJob !== "all") {
+      fetchJobAnalytics();
+    }
+  }, [selectedJob, timeframe]);
+
   // Loading state
   if (loading) {
     return (

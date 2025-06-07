@@ -1,8 +1,7 @@
 import Analytics from "../models/Analytics.js";
 import Job from "../models/Job.js";
 import Application from "../models/Application.js";
-
-import { calculateMatchScore } from "./enhancedJobMatching.js";
+import mongoose from "mongoose";
 
 class AnalyticsService {
   async calculateHiringFunnelMetrics(companyId, timeRange) {
@@ -11,79 +10,39 @@ class AnalyticsService {
     const pipeline = [
       {
         $match: {
-          company: companyId,
+          company: new mongoose.Types.ObjectId(companyId),
           createdAt: { $gte: startDate },
-        },
-      },
-      {
-        $lookup: {
-          from: "applications",
-          localField: "_id",
-          foreignField: "job",
-          as: "applications",
-        },
-      },
-      {
-        $project: {
-          totalApplications: { $size: "$applications" },
-          reviewedApplications: {
-            $size: {
-              $filter: {
-                input: "$applications",
-                as: "app",
-                cond: { $ne: ["$$app.status", "pending"] },
-              },
-            },
-          },
-          shortlistedCandidates: {
-            $size: {
-              $filter: {
-                input: "$applications",
-                as: "app",
-                cond: { $eq: ["$$app.status", "shortlisted"] },
-              },
-            },
-          },
-          interviewedCandidates: {
-            $size: {
-              $filter: {
-                input: "$applications",
-                as: "app",
-                cond: { $eq: ["$$app.status", "interviewed"] },
-              },
-            },
-          },
-          hiredCandidates: {
-            $size: {
-              $filter: {
-                input: "$applications",
-                as: "app",
-                cond: { $eq: ["$$app.status", "hired"] },
-              },
-            },
-          },
         },
       },
       {
         $group: {
           _id: null,
-          totalApplications: { $sum: "$totalApplications" },
-          reviewedApplications: { $sum: "$reviewedApplications" },
-          shortlistedCandidates: { $sum: "$shortlistedCandidates" },
-          interviewedCandidates: { $sum: "$interviewedCandidates" },
-          hiredCandidates: { $sum: "$hiredCandidates" },
+          totalApplications: { $sum: 1 },
+          reviewed: {
+            $sum: { $cond: [{ $ne: ["$status", "pending"] }, 1, 0] },
+          },
+          shortlisted: {
+            $sum: { $cond: [{ $eq: ["$status", "shortlisted"] }, 1, 0] },
+          },
+          interviewed: {
+            $sum: { $cond: [{ $eq: ["$status", "interviewed"] }, 1, 0] },
+          },
+          hired: {
+            $sum: { $cond: [{ $eq: ["$status", "hired"] }, 1, 0] },
+          },
         },
       },
     ];
 
-    const [result] = await Job.aggregate(pipeline);
+    const result = await Application.aggregate(pipeline);
+
     return (
-      result || {
+      result[0] || {
         totalApplications: 0,
-        reviewedApplications: 0,
-        shortlistedCandidates: 0,
-        interviewedCandidates: 0,
-        hiredCandidates: 0,
+        reviewed: 0,
+        shortlisted: 0,
+        interviewed: 0,
+        hired: 0,
       }
     );
   }
@@ -94,7 +53,7 @@ class AnalyticsService {
     const pipeline = [
       {
         $match: {
-          company: companyId,
+          company: new mongoose.Types.ObjectId(companyId),
           status: "hired",
           createdAt: { $gte: startDate },
         },
@@ -107,70 +66,117 @@ class AnalyticsService {
               1000 * 60 * 60 * 24, // Convert to days
             ],
           },
-          stages: "$statusHistory",
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          averageDays: { $avg: "$timeToHire" },
+          totalHired: { $sum: 1 },
         },
       },
     ];
 
-    const applications = await Application.aggregate(pipeline);
+    const result = await Application.aggregate(pipeline);
 
-    if (applications.length === 0) {
+    return result[0] || { averageDays: 0, totalHired: 0 };
+  }
+
+  async calculateMatchScores(companyId, timeRange) {
+    const startDate = this.getStartDate(timeRange);
+
+    const pipeline = [
+      {
+        $match: {
+          company: new mongoose.Types.ObjectId(companyId),
+          createdAt: { $gte: startDate },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          averageScore: { $avg: "$matchScore" },
+          distribution: {
+            $push: "$matchScore",
+          },
+        },
+      },
+    ];
+
+    const result = await Application.aggregate(pipeline);
+
+    if (!result.length) {
       return {
         average: 0,
-        stages: {},
-        bottlenecks: [],
+        distribution: {
+          low: 0,
+          medium: 0,
+          high: 0,
+        },
       };
     }
 
-    const stageDurations = {
-      applied: [],
-      reviewed: [],
-      shortlisted: [],
-      interviewed: [],
-      hired: [],
+    const scores = result[0].distribution;
+    const distribution = {
+      low: scores.filter((score) => score < 60).length,
+      medium: scores.filter((score) => score >= 60 && score < 80).length,
+      high: scores.filter((score) => score >= 80).length,
     };
 
-    let totalTimeToHire = 0;
+    return {
+      average: Math.round(result[0].averageScore),
+      distribution,
+    };
+  }
 
-    applications.forEach((app) => {
-      totalTimeToHire += app.timeToHire;
+  async calculateJobMetrics(jobId, companyId, timeRange) {
+    const startDate = this.getStartDate(timeRange);
 
-      let prevDate = app.stages[0].date;
-      for (let i = 1; i < app.stages.length; i++) {
-        const stage = app.stages[i];
-        const duration =
-          (new Date(stage.date) - new Date(prevDate)) / (1000 * 60 * 60 * 24);
-        stageDurations[app.stages[i - 1].status].push(duration);
-        prevDate = stage.date;
-      }
-    });
+    const pipeline = [
+      {
+        $match: {
+          job: new mongoose.Types.ObjectId(jobId),
+          company: new mongoose.Types.ObjectId(companyId),
+          createdAt: { $gte: startDate },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalApplications: { $sum: 1 },
+          avgMatchScore: { $avg: "$matchScore" },
+          statusDistribution: {
+            $push: "$status",
+          },
+          qualifiedCandidates: {
+            $sum: { $cond: [{ $gte: ["$matchScore", 70] }, 1, 0] },
+          },
+        },
+      },
+    ];
 
-    const average = totalTimeToHire / applications.length;
-    const stages = {};
-    const bottlenecks = [];
+    const result = await Application.aggregate(pipeline);
 
-    Object.entries(stageDurations).forEach(([stage, durations]) => {
-      if (durations.length > 0) {
-        const avgDuration =
-          durations.reduce((a, b) => a + b, 0) / durations.length;
-        stages[stage] = Math.round(avgDuration * 10) / 10;
+    if (!result.length) {
+      return {
+        totalApplications: 0,
+        avgMatchScore: 0,
+        statusDistribution: {},
+        qualifiedCandidates: 0,
+      };
+    }
 
-        if (avgDuration > 7) {
-          bottlenecks.push({
-            stage,
-            severity: avgDuration > 14 ? "high" : "medium",
-            description: `Average ${Math.round(
-              avgDuration
-            )} days in ${stage} stage`,
-          });
-        }
-      }
-    });
+    const metrics = result[0];
+    const statusCount = metrics.statusDistribution.reduce((acc, status) => {
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {});
 
     return {
-      average: Math.round(average * 10) / 10,
-      stages,
-      bottlenecks,
+      totalApplications: metrics.totalApplications,
+      avgMatchScore: Math.round(metrics.avgMatchScore),
+      statusDistribution: statusCount,
+      qualifiedCandidates: metrics.qualifiedCandidates,
     };
   }
 
@@ -180,7 +186,7 @@ class AnalyticsService {
     const pipeline = [
       {
         $match: {
-          company: companyId,
+          company: new mongoose.Types.ObjectId(companyId),
           createdAt: { $gte: startDate },
         },
       },
@@ -188,200 +194,121 @@ class AnalyticsService {
         $group: {
           _id: "$source",
           count: { $sum: 1 },
-          averageMatchScore: { $avg: "$matchScore" },
-          qualifiedCandidates: {
-            $sum: {
-              $cond: [{ $gte: ["$matchScore", 70] }, 1, 0],
-            },
-          },
         },
       },
     ];
 
     const results = await Application.aggregate(pipeline);
-
-    const applicationSources = {};
-    const qualityBySource = {};
-
-    results.forEach((result) => {
-      applicationSources[result._id || "direct"] = result.count;
-      qualityBySource[result._id || "direct"] = Math.round(
-        (result.qualifiedCandidates / result.count) * 100
-      );
+    const distribution = {};
+    let totalApplications = 0;
+    results.forEach(({ _id, count }) => {
+      distribution[_id] = count;
+      totalApplications += count;
     });
 
-    return {
-      applicationSources,
-      qualityBySource,
-    };
+    return { totalApplications, distribution };
   }
-  async calculateMatchScores(companyId, timeRange) {
+
+  async calculateLanguageDistribution(companyId, timeRange) {
     const startDate = this.getStartDate(timeRange);
 
     const pipeline = [
       {
         $match: {
-          company: companyId,
+          company: new mongoose.Types.ObjectId(companyId),
           createdAt: { $gte: startDate },
         },
       },
       {
-        $facet: {
-          overallStats: [
-            {
-              $group: {
-                _id: null,
-                average: { $avg: "$matchScore" },
-                total: { $sum: 1 },
-                low: { $sum: { $cond: [{ $lte: ["$matchScore", 50] }, 1, 0] } },
-                medium: {
-                  $sum: {
-                    $cond: [
-                      {
-                        $and: [
-                          { $gt: ["$matchScore", 50] },
-                          { $lte: ["$matchScore", 75] },
-                        ],
-                      },
-                      1,
-                      0,
-                    ],
-                  },
-                },
-                high: { $sum: { $cond: [{ $gt: ["$matchScore", 75] }, 1, 0] } },
-              },
-            },
-          ],
-          skillBreakdown: [
-            {
-              $lookup: {
-                from: "resumes",
-                localField: "resume",
-                foreignField: "_id",
-                as: "resumeData",
-              },
-            },
-            { $unwind: "$resumeData" },
-            { $unwind: "$resumeData.skills" },
-            {
-              $group: {
-                _id: "$resumeData.skills",
-                count: { $sum: 1 },
-                avgMatchScore: { $avg: "$matchScore" },
-                applications: { $sum: 1 },
-                shortlisted: {
-                  $sum: { $cond: [{ $eq: ["$status", "shortlisted"] }, 1, 0] },
-                },
-              },
-            },
-            {
-              $project: {
-                skill: "$_id",
-                count: 1,
-                avgMatchScore: 1,
-                shortlistRate: {
-                  $multiply: [
-                    { $divide: ["$shortlisted", "$applications"] },
-                    100,
-                  ],
-                },
-              },
-            },
-            { $sort: { avgMatchScore: -1 } },
-            { $limit: 10 },
-          ],
-          experienceDistribution: [
-            {
-              $lookup: {
-                from: "resumes",
-                localField: "resume",
-                foreignField: "_id",
-                as: "resumeData",
-              },
-            },
-            { $unwind: "$resumeData" },
-            {
-              $group: {
-                _id: "$resumeData.experience.level",
-                count: { $sum: 1 },
-                avgMatchScore: { $avg: "$matchScore" },
-                shortlisted: {
-                  $sum: { $cond: [{ $eq: ["$status", "shortlisted"] }, 1, 0] },
-                },
-              },
-            },
-            {
-              $project: {
-                level: "$_id",
-                count: 1,
-                avgMatchScore: 1,
-                shortlistRate: {
-                  $multiply: [{ $divide: ["$shortlisted", "$count"] }, 100],
-                },
-              },
-            },
-          ],
-          qualityMetrics: [
-            {
-              $group: {
-                _id: null,
-                avgResponseTime: { $avg: "$responseTime" },
-                highQualityMatches: {
-                  $sum: { $cond: [{ $gte: ["$matchScore", 85] }, 1, 0] },
-                },
-                totalApplications: { $sum: 1 },
-                shortlistedRate: {
-                  $avg: { $cond: [{ $eq: ["$status", "shortlisted"] }, 1, 0] },
-                },
-              },
-            },
-          ],
+        $group: {
+          _id: "$language",
+          count: { $sum: 1 },
         },
       },
     ];
 
-    const [result] = await Application.aggregate(pipeline);
+    const results = await Application.aggregate(pipeline);
+    const distribution = {};
+    let totalApplications = 0;
+    results.forEach(({ _id, count }) => {
+      distribution[_id] = count;
+      totalApplications += count;
+    });
 
-    // Transform results
-    const stats = result.overallStats[0] || {
-      average: 0,
-      total: 0,
-      low: 0,
-      medium: 0,
-      high: 0,
+    return { totalApplications, distribution };
+  }
+
+  async calculateJobsStatusOverview(companyId, timeRange = "all") {
+    const startDate = this.getStartDate(timeRange);
+
+    // fetch all jobs for the company
+    const jobs = await Job.find({
+      company: new mongoose.Types.ObjectId(companyId),
+    })
+      .select("_id title isActive")
+      .lean();
+    if (!jobs.length) {
+      return { totalJobs: 0, activeJobs: 0, jobs: [] };
+    }
+
+    const jobIds = jobs.map((j) => j._id);
+    const matchConditions = {
+      company: new mongoose.Types.ObjectId(companyId),
+      job: { $in: jobIds },
+      // only apply date filter when not "all"
+      ...(timeRange !== "all" && { createdAt: { $gte: startDate } }),
     };
 
-    const topSkills = result.skillBreakdown.map((skill) => ({
-      name: skill.skill,
-      count: skill.count,
-      matchRate: Math.round(skill.avgMatchScore),
-      shortlistRate: Math.round(skill.shortlistRate),
-    }));
+    const appStats = await Application.aggregate([
+      { $match: matchConditions },
+      {
+        $group: {
+          _id: { job: "$job", status: "$status" },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
 
-    const qualityMetrics = result.qualityMetrics[0] || {};
+    // build a lookup map: { jobId: { totalApplications, statusDistribution } }
+    const statsMap = appStats.reduce((map, { _id, count }) => {
+      const key = _id.job.toString();
+      if (!map[key]) {
+        map[key] = { totalApplications: 0, statusDistribution: {} };
+      }
+      map[key].statusDistribution[_id.status] = count;
+      map[key].totalApplications += count;
+      return map;
+    }, {});
 
+    const statuses = [
+      "pending",
+      "shortlisted",
+      "interviewed",
+      "hired",
+      "rejected",
+    ];
+    const jobsMetrics = jobs.map((job) => {
+      const sm = statsMap[job._id.toString()] || {
+        totalApplications: 0,
+        statusDistribution: {},
+      };
+      statuses.forEach((s) => {
+        sm.statusDistribution[s] = sm.statusDistribution[s] || 0;
+      });
+      return {
+        jobId: job._id,
+        title: job.title,
+        isActive: job.isActive,
+        totalApplications: sm.totalApplications,
+        statusDistribution: sm.statusDistribution,
+      };
+    });
+
+    const activeJobs = jobsMetrics.filter((j) => j.isActive).length;
     return {
-      average: Math.round(stats.average * 10) / 10,
-      distribution: {
-        low: Math.round((stats.low / stats.total) * 100),
-        medium: Math.round((stats.medium / stats.total) * 100),
-        high: Math.round((stats.high / stats.total) * 100),
-      },
-      skillAnalysis: {
-        topSkills,
-        experienceDistribution: result.experienceDistribution,
-      },
-      qualityMetrics: {
-        avgResponseTime: qualityMetrics.avgResponseTime || 0,
-        highQualityMatchRate: qualityMetrics.totalApplications
-          ? Math.round(
-              (qualityMetrics.highQualityMatches /
-                qualityMetrics.totalApplications) *
-                100
-            )
-          : 0,
-        shortlistedRate: Math.round(qualityMetrics.shortlistedRate * 100) || 0,
-      },
+      totalJobs: jobsMetrics.length,
+      activeJobs,
+      jobs: jobsMetrics,
     };
   }
 
@@ -404,7 +331,7 @@ class AnalyticsService {
   async saveAnalytics(data) {
     return await Analytics.create({
       ...data,
-      date: new Date(),
+      createdAt: new Date(),
     });
   }
 }
