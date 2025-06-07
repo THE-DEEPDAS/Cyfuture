@@ -9,10 +9,21 @@ const ChatbotAssistant = ({ applicationId }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
+  const [questions, setQuestions] = useState([]);
+  const [answers, setAnswers] = useState({});
+  const [evaluationInProgress, setEvaluationInProgress] = useState(false);
   const messagesEndRef = useRef(null);
 
   const application = useSelector((state) => state.application?.application);
   const user = useSelector((state) => state.auth.user);
+
+  // Load questions from application job
+  useEffect(() => {
+    if (application?.job?.screeningQuestions) {
+      setQuestions(application.job.screeningQuestions);
+    }
+  }, [application]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -27,6 +38,44 @@ const ChatbotAssistant = ({ applicationId }) => {
       setMessages(application.messages);
     }
   }, [application]);
+
+  // Auto-ask next question when a message is sent
+  useEffect(() => {
+    const askNextQuestion = async () => {
+      // Only proceed if we're not at the end and not currently evaluating
+      if (currentQuestionIndex >= questions.length || evaluationInProgress)
+        return;
+
+      // If we haven't started questions yet and we have messages (candidate joined)
+      if (currentQuestionIndex === -1 && messages.length > 0) {
+        setCurrentQuestionIndex(0);
+        await sendCompanyMessage(questions[0]);
+        return;
+      }
+
+      // If we have a candidate's answer to the current question
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage?.sender === "candidate") {
+        // Store the answer
+        setAnswers((prev) => ({
+          ...prev,
+          [currentQuestionIndex]: lastMessage.content,
+        }));
+
+        // Move to next question
+        if (currentQuestionIndex + 1 < questions.length) {
+          setCurrentQuestionIndex(currentQuestionIndex + 1);
+          await sendCompanyMessage(questions[currentQuestionIndex + 1]);
+        } else {
+          // All questions answered, evaluate
+          setEvaluationInProgress(true);
+          await evaluateAnswers();
+        }
+      }
+    };
+
+    askNextQuestion();
+  }, [messages, currentQuestionIndex, questions]);
 
   // Handle sending a message
   const handleSendMessage = async (e) => {
@@ -69,6 +118,53 @@ const ChatbotAssistant = ({ applicationId }) => {
       setNewMessage(newMessage);
     } finally {
       setSending(false);
+    }
+  };
+
+  // Send message as company
+  const sendCompanyMessage = async (content) => {
+    try {
+      const response = await api.post(
+        `/applications/${applicationId}/messages`,
+        {
+          content,
+          sender: "company",
+        }
+      );
+
+      if (Array.isArray(response.data)) {
+        setMessages(response.data);
+      }
+    } catch (error) {
+      console.error("Error sending company message:", error);
+      toast.error("Failed to send company message");
+    }
+  };
+
+  // Evaluate answers
+  const evaluateAnswers = async () => {
+    try {
+      const evaluationData = {
+        questions: questions,
+        answers: Object.values(answers),
+        jobId: application.job._id,
+      };
+
+      const response = await api.post(
+        `/applications/${applicationId}/evaluate-screening`,
+        evaluationData
+      );
+
+      // Send evaluation result as a company message
+      await sendCompanyMessage(
+        `Interview Evaluation Complete\nScore: ${response.data.score}/100\n${response.data.feedback}`
+      );
+
+      setEvaluationInProgress(false);
+    } catch (error) {
+      console.error("Error evaluating answers:", error);
+      toast.error("Failed to evaluate answers");
+      setEvaluationInProgress(false);
     }
   };
 

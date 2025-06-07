@@ -6,15 +6,27 @@ import Application from "../models/Application.js";
 import Job from "../models/Job.js";
 import { generateChatResponse } from "../utils/llm.js";
 
-// @desc    Evaluate screening responses with AI
+// @desc    Evaluate screening responses with AI (High Priority)
 // @route   POST /api/applications/:id/evaluate-screening
 // @access  Private/Company
 // Cache to prevent repeated evaluations
 const evaluationCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
 
+// Priority settings for Gemini API calls
+const EVALUATION_PRIORITY = {
+  URGENT: {
+    timeout: 30000, // 30 second timeout
+    retries: 2, // Number of retries
+    priority: "high",
+  },
+};
+
 export const evaluateScreeningResponses = asyncHandler(async (req, res) => {
   const { id } = req.params;
+
+  // Set a lock in the request to indicate this is a high-priority evaluation
+  req.isEvaluationRequest = true;
 
   // Find the application
   const application = await Application.findById(id)
@@ -70,24 +82,28 @@ export const evaluateScreeningResponses = asyncHandler(async (req, res) => {
 
     return res.json(application);
   }
-
   try {
-    // Process each screening response with AI
-    for (let i = 0; i < application.screeningResponses.length; i++) {
-      const response = application.screeningResponses[i];
+    // Process all screening responses with AI in parallel for faster evaluation
+    const evaluationPromises = application.screeningResponses.map(
+      async (response, i) => {
+        // Set high priority flag for Gemini API call
+        const evaluationOptions = {
+          priority: "high",
+          timeout: 30000, // 30 second timeout for evaluation
+        };
 
-      // Get the question text
-      const questionText =
-        response.questionText ||
-        (response.question &&
-          application.job.screeningQuestions[i]?.question) ||
-        "Unknown question";
+        // Get the question text
+        const questionText =
+          response.questionText ||
+          (response.question &&
+            application.job.screeningQuestions[i]?.question) ||
+          "Unknown question";
 
-      // Get the candidate's response
-      const candidateResponse = response.response;
+        // Get the candidate's response
+        const candidateResponse = response.response;
 
-      // Create a prompt for the LLM
-      const prompt = `
+        // Create a prompt for the LLM
+        const prompt = `
         You are an AI assistant helping evaluate a job candidate's screening response.
         
         Job Title: ${application.job.title}
@@ -113,43 +129,46 @@ export const evaluateScreeningResponses = asyncHandler(async (req, res) => {
         }
       `;
 
-      // Get AI response
-      const aiResponse = await generateChatResponse(prompt);
+        // Get AI response
+        const aiResponse = await generateChatResponse(prompt);
 
-      // Parse the AI response (handling potential format issues)
-      let evaluationData;
-      try {
-        // Try to extract JSON from the response
-        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-        evaluationData = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+        // Parse the AI response (handling potential format issues)
+        let evaluationData;
+        try {
+          // Try to extract JSON from the response
+          const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+          evaluationData = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
 
-        if (!evaluationData || typeof evaluationData.score !== "number") {
-          // Fallback to regex parsing if JSON extraction fails
-          const scoreMatch = aiResponse.match(/score["']?\s*:\s*(\d+)/i);
-          const feedbackMatch = aiResponse.match(
-            /feedback["']?\s*:\s*["']([^"']+)["']/i
-          );
+          if (!evaluationData || typeof evaluationData.score !== "number") {
+            // Fallback to regex parsing if JSON extraction fails
+            const scoreMatch = aiResponse.match(/score["']?\s*:\s*(\d+)/i);
+            const feedbackMatch = aiResponse.match(
+              /feedback["']?\s*:\s*["']([^"']+)["']/i
+            );
 
-          evaluationData = {
-            score: scoreMatch ? parseInt(scoreMatch[1]) : 70,
-            feedback: feedbackMatch ? feedbackMatch[1] : "Response evaluated.",
-          };
+            evaluationData = {
+              score: scoreMatch ? parseInt(scoreMatch[1]) : 70,
+              feedback: feedbackMatch
+                ? feedbackMatch[1]
+                : "Response evaluated.",
+            };
+          }
+        } catch (parseError) {
+          console.error("Error parsing AI response:", parseError);
+          evaluationData = { score: 70, feedback: "Response evaluated." };
         }
-      } catch (parseError) {
-        console.error("Error parsing AI response:", parseError);
-        evaluationData = { score: 70, feedback: "Response evaluated." };
+
+        // Cap score between 0 and 100
+        const score = Math.min(100, Math.max(0, evaluationData.score));
+
+        // Update the application with the evaluation
+        application.screeningResponses[i].llmEvaluation = {
+          score,
+          feedback: evaluationData.feedback,
+          confidence: 0.85,
+        };
       }
-
-      // Cap score between 0 and 100
-      const score = Math.min(100, Math.max(0, evaluationData.score));
-
-      // Update the application with the evaluation
-      application.screeningResponses[i].llmEvaluation = {
-        score,
-        feedback: evaluationData.feedback,
-        confidence: 0.85,
-      };
-    }
+    );
 
     // Calculate overall screening score
     if (application.screeningResponses.length > 0) {

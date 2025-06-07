@@ -26,6 +26,7 @@ import {
   getCandidates,
   submitInterviewResponse,
 } from "../controllers/applicationController.js";
+import { evaluateScreeningResponses } from "../controllers/evaluateScreeningResponses.js";
 
 const router = express.Router();
 
@@ -42,6 +43,9 @@ router.post(
   candidate,
   submitInterviewResponse
 );
+
+// Screening evaluation route - high priority
+router.post("/:id/evaluate-screening", protect, evaluateScreeningResponses);
 
 // Application routes
 // @route   POST /api/applications/:jobId
@@ -107,5 +111,11 @@ router.get(
 
 // @route   GET /api/applications/candidates
 router.get("/candidates", protect, companyOnly, getCandidates);
+
+// POST /:id/messages - Send a message
+router
+  .route("/:id/messages")
+  .get(protect, getApplicationMessages)
+  .post(protect, sendMessage);
 
 export default router;
