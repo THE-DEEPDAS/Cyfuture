@@ -112,11 +112,28 @@ const generateFallbackAnalysis = (job, candidate) => {
 const requestCache = new Map();
 const CACHE_TTL = 30000; // 30 seconds cache TTL
 
-// Prevent excessive API calls with timestamp-based throttling
+// Track the last request time for delay calculation
 let lastRequestTime = 0;
-const THROTTLE_INTERVAL = 30000; // 30 seconds between calls
+// Default delay between API calls (10 seconds)
+const DEFAULT_DELAY = 10000;
 
-export const getLLMResponse = async (prompt) => {
+/**
+ * Helper function to introduce a delay
+ * @param {number} ms - Milliseconds to delay
+ * @returns {Promise<void>}
+ */
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Send a prompt to the LLM and get a response
+ * @param {string} prompt - The prompt to send to the LLM
+ * @param {Object} options - Additional options
+ * @param {boolean} options.skipDelay - If true, skip the delay (use with caution)
+ * @param {number} options.customDelay - Custom delay in milliseconds
+ * @param {boolean} options.forceDelay - If true, apply the full delay regardless of time since last request
+ * @returns {Promise<string>} - The text response from the LLM
+ */
+export const getLLMResponse = async (prompt, options = {}) => {
   try {
     // Check if we have this prompt in cache
     if (requestCache.has(prompt)) {
@@ -124,15 +141,37 @@ export const getLLMResponse = async (prompt) => {
       return requestCache.get(prompt);
     }
 
-    // Check if we should throttle
     const now = Date.now();
-    if (now - lastRequestTime < THROTTLE_INTERVAL) {
-      console.log("Throttling Gemini API request, using fallback...");
-      return "I'm processing your request. Please wait a moment before asking again.";
+    const timeSinceLastRequest = now - lastRequestTime;
+
+    // Calculate how much time we need to wait before making another request
+    // Option 1: skipDelay - skip any delay (use with caution)
+    // Option 2: forceDelay - apply the full delay regardless of time since last request
+    // Option 3: normal behavior - apply remaining delay based on time since last request
+    if (!options.skipDelay) {
+      const delayTime = options.customDelay || DEFAULT_DELAY;
+
+      if (options.forceDelay) {
+        // Apply full delay regardless of time since last request
+        console.log(
+          `Applying full delay of ${delayTime}ms before LLM request...`
+        );
+        await delay(delayTime);
+      } else if (lastRequestTime > 0) {
+        // Calculate remaining delay based on time since last request
+        const remainingDelay = delayTime - timeSinceLastRequest;
+
+        if (remainingDelay > 0) {
+          console.log(
+            `Waiting ${remainingDelay}ms before making next LLM request...`
+          );
+          await delay(remainingDelay);
+        }
+      }
     }
 
-    // Update last request time
-    lastRequestTime = now;
+    // Update last request time after any delay
+    lastRequestTime = Date.now();
 
     console.log("Making request to Gemini API...");
     const result = await model.generateContent(prompt);

@@ -44,13 +44,11 @@ export const uploadResume = async (req, res) => {
     } catch (uploadError) {
       console.error("Cloudinary upload failed:", uploadError);
       throw new Error("Failed to upload file");
-    }
-
-    // Parse the resume using LLM
+    } // Parse the resume using LLM with separate calls for skills, experience, and projects
     try {
-      console.log("Attempting to parse resume with LLM");
+      console.log("Attempting to parse resume with LLM using separate calls");
       const { parseResumeWithLLM } = await import(
-        "../services/llmResumeExtractor.js"
+        "../services/separateCallsResumeExtractor.js"
       );
       parsedData = await parseResumeWithLLM(req.file.buffer);
       console.log("Resume parsed successfully:", parsedData);
@@ -210,12 +208,45 @@ export const getDefaultResume = async (req, res) => {
         createdAt: -1,
       });
     }
-
     if (!resume) {
       return res.status(404).json({ message: "No resumes found" });
     }
 
-    res.json(resume);
+    // Ensure proper data structure before sending
+    const formattedResponse = {
+      ...resume.toObject(),
+      parsedData: {
+        skills: Array.isArray(resume.parsedData?.skills)
+          ? resume.parsedData.skills
+          : [],
+        experience: Array.isArray(resume.parsedData?.experience)
+          ? resume.parsedData.experience.map((exp) => ({
+              title: exp.title || "",
+              company: exp.company || "",
+              location: exp.location || "",
+              startDate: exp.startDate || "",
+              endDate: exp.endDate || null,
+              description: exp.description || "",
+            }))
+          : [],
+        projects: Array.isArray(resume.parsedData?.projects)
+          ? resume.parsedData.projects.map((proj) => ({
+              name: proj.name || "",
+              description: proj.description || "",
+              technologies: Array.isArray(proj.technologies)
+                ? proj.technologies
+                : [],
+              url: proj.url || "",
+            }))
+          : [],
+      },
+    };
+
+    console.log(
+      "Sending formatted default resume data:",
+      JSON.stringify(formattedResponse.parsedData, null, 2)
+    );
+    res.json(formattedResponse);
   } catch (error) {
     console.error("Get default resume error:", error);
     res.status(500).json({ message: "Server error fetching default resume" });

@@ -51,182 +51,128 @@ Parse the following resume text and output EXACTLY this JSON structure:
 }
 
 Resume text to parse:
-${resumeText}`; // Call the LLM with the prompt
+${resumeText}`;
+
+    // Call the LLM with the prompt
     const llmResponse = await getLLMResponse(prompt);
     console.log("Raw LLM Response received");
-
+    
     // Initialize empty structure for parsed data
     let parsedData = {
       skills: [],
       experience: [],
-      projects: [],
+      projects: []
     };
-
+    
     // First, try to find the most complete JSON object in the response
     // This regex looks for the pattern that most closely matches our expected structure
-    const fullJsonRegex =
-      /\{[\s\S]*?"skills"\s*:\s*\[[\s\S]*?\][\s\S]*?"experience"\s*:\s*\[[\s\S]*?\][\s\S]*?"projects"\s*:\s*\[[\s\S]*?\][\s\S]*?\}/;
+    const fullJsonRegex = /\{[\s\S]*?"skills"\s*:\s*\[[\s\S]*?\][\s\S]*?"experience"\s*:\s*\[[\s\S]*?\][\s\S]*?"projects"\s*:\s*\[[\s\S]*?\][\s\S]*?\}/;
     const completeJsonMatch = llmResponse.match(fullJsonRegex);
-
+    
     if (completeJsonMatch) {
       // We found what looks like a complete JSON object with all three fields
       try {
         parsedData = JSON.parse(completeJsonMatch[0]);
         console.log("Successfully parsed complete JSON object from response");
       } catch (completeJsonError) {
-        console.log(
-          "Found complete-looking JSON but failed to parse it, trying to fix:",
-          completeJsonError
-        );
-
+        console.log("Found complete-looking JSON but failed to parse it, trying to fix:", completeJsonError);
+        
         try {
           // Try to fix the JSON
           let fixedJson = completeJsonMatch[0]
-            .replace(/(\w+):/g, '"$1":') // Add quotes to keys
-            .replace(/'/g, '"') // Replace single quotes with double quotes
-            .replace(/,\s*}/g, "}") // Remove trailing commas
-            .replace(/,\s*]/g, "]"); // Remove trailing commas in arrays
-
+            .replace(/(\w+):/g, '"$1":')  // Add quotes to keys
+            .replace(/'/g, '"')           // Replace single quotes with double quotes
+            .replace(/,\s*}/g, '}')       // Remove trailing commas
+            .replace(/,\s*]/g, ']');      // Remove trailing commas in arrays
+          
           parsedData = JSON.parse(fixedJson);
           console.log("Successfully parsed fixed complete JSON");
         } catch (fixError) {
-          console.log(
-            "Failed to fix complete JSON, falling back to partial extraction"
-          );
+          console.log("Failed to fix complete JSON, falling back to partial extraction");
         }
       }
     }
-
+    
     // If we couldn't parse a complete JSON object, try to extract individual sections
-    if (
-      !parsedData.skills.length &&
-      !parsedData.experience.length &&
-      !parsedData.projects.length
-    ) {
-      console.log(
-        "No complete JSON found or it was empty, extracting partial JSON objects"
-      );
-
+    if (!parsedData.skills.length && !parsedData.experience.length && !parsedData.projects.length) {
+      console.log("No complete JSON found or it was empty, extracting partial JSON objects");
+      
       // Look for JSON-like patterns that might contain our data
       const jsonMatches = llmResponse.match(/(\{[\s\S]*?\})/g);
-
+      
       if (jsonMatches && jsonMatches.length > 0) {
-        console.log(
-          `Found ${jsonMatches.length} potential JSON fragments in LLM response`
-        );
-
+        console.log(`Found ${jsonMatches.length} potential JSON fragments in LLM response`);
+        
         // Sort matches by length - longer fragments are more likely to contain useful data
         jsonMatches.sort((a, b) => b.length - a.length);
-
+        
         // Try each fragment, starting with the largest
         for (const jsonCandidate of jsonMatches) {
           // Skip very small fragments that are likely not useful
           if (jsonCandidate.length < 20) continue;
-
+          
           try {
             const candidateData = JSON.parse(jsonCandidate);
-
+            
             // Only merge if this candidate contains at least one of our expected fields
-            const hasRelevantData =
-              (Array.isArray(candidateData.skills) &&
-                candidateData.skills.length > 0) ||
-              (Array.isArray(candidateData.experience) &&
-                candidateData.experience.length > 0) ||
-              (Array.isArray(candidateData.projects) &&
-                candidateData.projects.length > 0);
-
+            const hasRelevantData = 
+              (Array.isArray(candidateData.skills) && candidateData.skills.length > 0) ||
+              (Array.isArray(candidateData.experience) && candidateData.experience.length > 0) ||
+              (Array.isArray(candidateData.projects) && candidateData.projects.length > 0);
+              
             if (hasRelevantData) {
               // Merge skills if this fragment has them and our current data doesn't
-              if (
-                Array.isArray(candidateData.skills) &&
-                candidateData.skills.length > 0 &&
-                parsedData.skills.length === 0
-              ) {
+              if (Array.isArray(candidateData.skills) && candidateData.skills.length > 0 && parsedData.skills.length === 0) {
                 parsedData.skills = candidateData.skills;
-                console.log(
-                  `Extracted skills from fragment: ${candidateData.skills.length} items`
-                );
+                console.log(`Extracted skills from fragment: ${candidateData.skills.length} items`);
               }
-
+              
               // Merge experience if this fragment has it and our current data doesn't
-              if (
-                Array.isArray(candidateData.experience) &&
-                candidateData.experience.length > 0 &&
-                parsedData.experience.length === 0
-              ) {
+              if (Array.isArray(candidateData.experience) && candidateData.experience.length > 0 && parsedData.experience.length === 0) {
                 parsedData.experience = candidateData.experience;
-                console.log(
-                  `Extracted experience from fragment: ${candidateData.experience.length} items`
-                );
+                console.log(`Extracted experience from fragment: ${candidateData.experience.length} items`);
               }
-
+              
               // Merge projects if this fragment has them and our current data doesn't
-              if (
-                Array.isArray(candidateData.projects) &&
-                candidateData.projects.length > 0 &&
-                parsedData.projects.length === 0
-              ) {
+              if (Array.isArray(candidateData.projects) && candidateData.projects.length > 0 && parsedData.projects.length === 0) {
                 parsedData.projects = candidateData.projects;
-                console.log(
-                  `Extracted projects from fragment: ${candidateData.projects.length} items`
-                );
+                console.log(`Extracted projects from fragment: ${candidateData.projects.length} items`);
               }
             }
           } catch (err) {
             // Try to fix and parse this candidate
             try {
               let fixedJson = jsonCandidate
-                .replace(/(\w+):/g, '"$1":') // Add quotes to keys
-                .replace(/'/g, '"') // Replace single quotes with double quotes
-                .replace(/,\s*}/g, "}") // Remove trailing commas
-                .replace(/,\s*]/g, "]"); // Remove trailing commas in arrays
-
+                .replace(/(\w+):/g, '"$1":')  // Add quotes to keys
+                .replace(/'/g, '"')           // Replace single quotes with double quotes
+                .replace(/,\s*}/g, '}')       // Remove trailing commas
+                .replace(/,\s*]/g, ']');      // Remove trailing commas in arrays
+              
               const fixedData = JSON.parse(fixedJson);
-
+              
               // Only merge if this fixed candidate contains at least one of our expected fields
-              const hasRelevantData =
-                (Array.isArray(fixedData.skills) &&
-                  fixedData.skills.length > 0) ||
-                (Array.isArray(fixedData.experience) &&
-                  fixedData.experience.length > 0) ||
-                (Array.isArray(fixedData.projects) &&
-                  fixedData.projects.length > 0);
-
+              const hasRelevantData = 
+                (Array.isArray(fixedData.skills) && fixedData.skills.length > 0) ||
+                (Array.isArray(fixedData.experience) && fixedData.experience.length > 0) ||
+                (Array.isArray(fixedData.projects) && fixedData.projects.length > 0);
+                
               if (hasRelevantData) {
                 // Merge skills if this fragment has them and our current data doesn't
-                if (
-                  Array.isArray(fixedData.skills) &&
-                  fixedData.skills.length > 0 &&
-                  parsedData.skills.length === 0
-                ) {
+                if (Array.isArray(fixedData.skills) && fixedData.skills.length > 0 && parsedData.skills.length === 0) {
                   parsedData.skills = fixedData.skills;
-                  console.log(
-                    `Extracted skills from fixed fragment: ${fixedData.skills.length} items`
-                  );
+                  console.log(`Extracted skills from fixed fragment: ${fixedData.skills.length} items`);
                 }
-
+                
                 // Merge experience if this fragment has it and our current data doesn't
-                if (
-                  Array.isArray(fixedData.experience) &&
-                  fixedData.experience.length > 0 &&
-                  parsedData.experience.length === 0
-                ) {
+                if (Array.isArray(fixedData.experience) && fixedData.experience.length > 0 && parsedData.experience.length === 0) {
                   parsedData.experience = fixedData.experience;
-                  console.log(
-                    `Extracted experience from fixed fragment: ${fixedData.experience.length} items`
-                  );
+                  console.log(`Extracted experience from fixed fragment: ${fixedData.experience.length} items`);
                 }
-
+                
                 // Merge projects if this fragment has them and our current data doesn't
-                if (
-                  Array.isArray(fixedData.projects) &&
-                  fixedData.projects.length > 0 &&
-                  parsedData.projects.length === 0
-                ) {
+                if (Array.isArray(fixedData.projects) && fixedData.projects.length > 0 && parsedData.projects.length === 0) {
                   parsedData.projects = fixedData.projects;
-                  console.log(
-                    `Extracted projects from fixed fragment: ${fixedData.projects.length} items`
-                  );
+                  console.log(`Extracted projects from fixed fragment: ${fixedData.projects.length} items`);
                 }
               }
             } catch (fixErr) {
@@ -239,65 +185,51 @@ ${resumeText}`; // Call the LLM with the prompt
         console.error("No JSON-like fragments found in LLM response");
       }
     }
-
+    
     // Create a normalized structure with default empty values
     const normalizedData = {
       skills: [],
       experience: [],
-      projects: [],
+      projects: []
     };
-
+    
     // Normalize skills (ensure it's an array of strings)
     if (Array.isArray(parsedData.skills)) {
       normalizedData.skills = parsedData.skills
-        .filter((skill) => typeof skill === "string" && skill.trim().length > 0)
-        .map((skill) => skill.trim());
+        .filter(skill => typeof skill === 'string' && skill.trim().length > 0)
+        .map(skill => skill.trim());
     }
-
+    
     // Normalize experience (ensure it's an array of valid experience objects)
     if (Array.isArray(parsedData.experience)) {
       normalizedData.experience = parsedData.experience
-        .filter((exp) => exp && typeof exp === "object")
-        .map((exp) => ({
-          title: typeof exp.title === "string" ? exp.title.trim() : "",
-          company: typeof exp.company === "string" ? exp.company.trim() : "",
-          location: typeof exp.location === "string" ? exp.location.trim() : "",
-          startDate:
-            typeof exp.startDate === "string" ? exp.startDate.trim() : "",
-          endDate: exp.endDate
-            ? typeof exp.endDate === "string"
-              ? exp.endDate.trim()
-              : null
-            : null,
-          description:
-            typeof exp.description === "string" ? exp.description.trim() : "",
+        .filter(exp => exp && typeof exp === 'object')
+        .map(exp => ({
+          title: typeof exp.title === 'string' ? exp.title.trim() : "",
+          company: typeof exp.company === 'string' ? exp.company.trim() : "",
+          location: typeof exp.location === 'string' ? exp.location.trim() : "",
+          startDate: typeof exp.startDate === 'string' ? exp.startDate.trim() : "",
+          endDate: exp.endDate ? (typeof exp.endDate === 'string' ? exp.endDate.trim() : null) : null,
+          description: typeof exp.description === 'string' ? exp.description.trim() : "",
         }))
-        .filter((exp) => exp.title || exp.company || exp.description); // Only keep entries with at least some content
+        .filter(exp => exp.title || exp.company || exp.description); // Only keep entries with at least some content
     }
-
+    
     // Normalize projects (ensure it's an array of valid project objects)
     if (Array.isArray(parsedData.projects)) {
       normalizedData.projects = parsedData.projects
-        .filter((proj) => proj && typeof proj === "object")
-        .map((proj) => ({
-          name: typeof proj.name === "string" ? proj.name.trim() : "",
-          description:
-            typeof proj.description === "string" ? proj.description.trim() : "",
-          technologies: Array.isArray(proj.technologies)
+        .filter(proj => proj && typeof proj === 'object')
+        .map(proj => ({
+          name: typeof proj.name === 'string' ? proj.name.trim() : "",
+          description: typeof proj.description === 'string' ? proj.description.trim() : "",
+          technologies: Array.isArray(proj.technologies) 
             ? proj.technologies
-                .filter(
-                  (tech) => typeof tech === "string" && tech.trim().length > 0
-                )
-                .map((tech) => tech.trim())
+                .filter(tech => typeof tech === 'string' && tech.trim().length > 0)
+                .map(tech => tech.trim())
             : [],
-          url: typeof proj.url === "string" ? proj.url.trim() : "",
+          url: typeof proj.url === 'string' ? proj.url.trim() : "",
         }))
-        .filter(
-          (proj) =>
-            proj.name ||
-            proj.description ||
-            (Array.isArray(proj.technologies) && proj.technologies.length > 0)
-        ); // Only keep entries with at least some content
+        .filter(proj => proj.name || proj.description || (Array.isArray(proj.technologies) && proj.technologies.length > 0)); // Only keep entries with at least some content
     }
 
     console.log("Successfully extracted and normalized resume data");
@@ -387,11 +319,11 @@ async function parseResumeWithLLM(pdfBuffer) {
     console.log(`Skills: ${extractedData.skills.length} items`);
     console.log(`Experience: ${extractedData.experience.length} items`);
     console.log(`Projects: ${extractedData.projects.length} items`);
-
+    
     // Return the extracted and normalized data
     return {
       ...extractedData,
-      rawText,
+      rawText
     };
   } catch (error) {
     console.error("Error parsing resume with LLM:", error);
