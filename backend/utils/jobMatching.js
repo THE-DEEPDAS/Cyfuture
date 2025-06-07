@@ -75,12 +75,42 @@ const calculateSkillsMatch = (requiredSkills = [], candidateSkills = []) => {
 const calculateExperienceMatch = (requiredYears = 0, experiences = []) => {
   if (!requiredYears) return 100;
 
-  const totalYears = experiences.reduce((total, exp) => {
-    const startDate = new Date(exp.startDate);
-    const endDate = exp.endDate ? new Date(exp.endDate) : new Date();
-    const years = (endDate - startDate) / (1000 * 60 * 60 * 24 * 365);
-    return total + years;
-  }, 0);
+  let totalYears = 0;
+
+  // Handle both array and single object cases
+  if (Array.isArray(experiences)) {
+    totalYears = experiences.reduce((total, exp) => {
+      try {
+        const startDate = new Date(exp.startDate);
+        const endDate = exp.endDate ? new Date(exp.endDate) : new Date();
+
+        // Validate dates before calculation
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+          return total;
+        }
+
+        const years = (endDate - startDate) / (1000 * 60 * 60 * 24 * 365);
+        return total + years;
+      } catch (error) {
+        console.warn("Error calculating experience duration:", error);
+        return total;
+      }
+    }, 0);
+  } else if (experiences && typeof experiences === "object") {
+    // Handle single experience object
+    try {
+      const startDate = new Date(experiences.startDate);
+      const endDate = experiences.endDate
+        ? new Date(experiences.endDate)
+        : new Date();
+
+      if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+        totalYears = (endDate - startDate) / (1000 * 60 * 60 * 24 * 365);
+      }
+    } catch (error) {
+      console.warn("Error calculating experience from single object:", error);
+    }
+  }
 
   const matchPercentage = (totalYears / requiredYears) * 100;
   return Math.round(Math.min(matchPercentage, 100));

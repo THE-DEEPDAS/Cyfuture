@@ -12,11 +12,34 @@ export const initializeMessageHandlers = (dispatch) => {
   // Listen for new messages
   socket.on("receive_message", (message) => {
     dispatch({ type: "MESSAGE_RECEIVED", payload: message });
-    // Trigger notification if needed
-    if (Notification.permission === "granted") {
-      new Notification("New Message", {
-        body: `${message.sender.name}: ${message.content.substring(0, 50)}...`,
+
+    // Show notification if permission is granted and message is not from current user
+    if (
+      Notification.permission === "granted" &&
+      message.sender._id !== localStorage.getItem("userId")
+    ) {
+      const notification = new Notification("New Message", {
+        body: `${message.sender.name}: ${message.content.substring(0, 50)}${
+          message.content.length > 50 ? "..." : ""
+        }`,
+        icon: message.sender.profileImage || "/default-avatar.png",
+        tag: `message-${message.conversation}`,
+        renotify: true,
       });
+
+      // Handle notification click
+      notification.onclick = () => {
+        window.focus();
+        // Navigate to conversation if needed
+        if (window.location.pathname !== `/messages/${message.conversation}`) {
+          window.location.href = `/messages/${message.conversation}`;
+        }
+      };
+    }
+
+    // Request notification permission if not granted
+    else if (Notification.permission === "default") {
+      Notification.requestPermission();
     }
   });
 
@@ -34,11 +57,20 @@ export const initializeMessageHandlers = (dispatch) => {
       payload: { userId, conversationId, isTyping: false },
     });
   });
+
   // Listen for read receipts
   socket.on("message_read", ({ messageId, userId }) => {
     dispatch({
       type: "MESSAGE_READ_STATUS_UPDATED",
       payload: { messageId, readBy: userId },
+    });
+  });
+
+  // Listen for message delivery status
+  socket.on("message_delivery_status", ({ messageId, status, error }) => {
+    dispatch({
+      type: "MESSAGE_DELIVERY_STATUS_UPDATED",
+      payload: { messageId, status, error },
     });
   });
 };

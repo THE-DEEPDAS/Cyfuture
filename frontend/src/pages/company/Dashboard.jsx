@@ -12,6 +12,7 @@ const CompanyDashboard = () => {
     totalApplications: 0,
     shortlisted: 0,
     hired: 0,
+    interviewing: 0,
   });
   const [recentApplications, setRecentApplications] = useState([]);
   const [jobPostings, setJobPostings] = useState([]);
@@ -48,149 +49,45 @@ const CompanyDashboard = () => {
 
     const fetchDashboardData = async () => {
       try {
-        // In a real application, these would be actual API calls
-        // For now, we'll simulate the data
+        setLoading(true);
 
-        // Simulated data loading delay
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        // Get query parameter to test empty states
-        const urlParams = new URLSearchParams(window.location.search);
-        const testEmpty = urlParams.get("empty") === "true";
-
-        if (testEmpty) {
-          // Empty state for testing
-          setStats({
-            activeJobs: 0,
-            totalApplications: 0,
-            shortlisted: 0,
-            hired: 0,
-          });
-          setRecentApplications([]);
-          setJobPostings([]);
-        } else {
-          // Simulated stats
-          setStats({
-            activeJobs: 5,
-            totalApplications: 87,
-            shortlisted: 24,
-            hired: 3,
-          });
-
-          // Simulated recent applications
-          setRecentApplications([
-            {
-              _id: "1",
-              candidate: {
-                _id: "101",
-                name: "John Smith",
-              },
-              job: {
-                _id: "201",
-                title: "Frontend Developer",
-              },
-              matchScore: 92,
-              status: "shortlisted",
-              createdAt: "2025-03-15T10:00:00Z",
-            },
-            {
-              _id: "2",
-              candidate: {
-                _id: "102",
-                name: "Sarah Johnson",
-              },
-              job: {
-                _id: "201",
-                title: "Frontend Developer",
-              },
-              matchScore: 88,
-              status: "reviewing",
-              createdAt: "2025-03-14T14:30:00Z",
-            },
-            {
-              _id: "3",
-              candidate: {
-                _id: "103",
-                name: "Michael Brown",
-              },
-              job: {
-                _id: "202",
-                title: "Backend Developer",
-              },
-              matchScore: 95,
-              status: "shortlisted",
-              createdAt: "2025-03-14T09:15:00Z",
-            },
-            {
-              _id: "4",
-              candidate: {
-                _id: "104",
-                name: "Emily Chen",
-              },
-              job: {
-                _id: "203",
-                title: "Full Stack Developer",
-              },
-              matchScore: 86,
-              status: "pending",
-              createdAt: "2025-03-13T16:45:00Z",
-            },
-            {
-              _id: "5",
-              candidate: {
-                _id: "105",
-                name: "David Wilson",
-              },
-              job: {
-                _id: "202",
-                title: "Backend Developer",
-              },
-              matchScore: 79,
-              status: "pending",
-              createdAt: "2025-03-12T11:30:00Z",
-            },
+        // Fetch real data from API
+        const [statsResponse, applicationsResponse, jobsResponse] =
+          await Promise.all([
+            api.get("/applications/stats"),
+            api.get("/applications/recent"),
+            api.get("/jobs/active"),
           ]);
 
-          // Simulated job postings
-          setJobPostings([
-            {
-              _id: "201",
-              title: "Frontend Developer",
-              location: "New York, NY",
-              type: "Full-time",
-              applicants: 32,
-              createdAt: "2025-03-10T08:00:00Z",
-              expiresAt: "2025-04-10T23:59:59Z",
-            },
-            {
-              _id: "202",
-              title: "Backend Developer",
-              location: "Remote",
-              type: "Full-time",
-              applicants: 28,
-              createdAt: "2025-03-08T10:30:00Z",
-              expiresAt: "2025-04-08T23:59:59Z",
-            },
-            {
-              _id: "203",
-              title: "Full Stack Developer",
-              location: "San Francisco, CA",
-              type: "Full-time",
-              applicants: 18,
-              createdAt: "2025-03-05T14:15:00Z",
-              expiresAt: "2025-04-05T23:59:59Z",
-            },
-            {
-              _id: "204",
-              title: "UX Designer",
-              location: "Chicago, IL",
-              type: "Contract",
-              applicants: 9,
-              createdAt: "2025-03-01T09:45:00Z",
-              expiresAt: "2025-04-01T23:59:59Z",
-            },
-          ]);
-        }
+        const stats = statsResponse.data;
+        const applications = applicationsResponse.data;
+        const jobs = jobsResponse.data;
+
+        setStats({
+          activeJobs: jobs.length,
+          totalApplications: stats.totalApplications || 0,
+          shortlisted: stats.shortlisted || 0,
+          hired: stats.hired || 0,
+          interviewing: stats.interviewing || 0,
+        });
+
+        // Process applications to include message and interview status
+        const processedApplications = applications.map((app) => ({
+          ...app,
+          hasMessages: app.messages?.length > 0,
+          hasInterview: app.messages?.some((m) => m.sender === "system"),
+          lastMessageAt: app.messages?.length
+            ? new Date(app.messages[app.messages.length - 1].createdAt)
+            : new Date(app.createdAt),
+        }));
+
+        // Sort by most recent message/activity
+        const sortedApplications = processedApplications.sort(
+          (a, b) => b.lastMessageAt - a.lastMessageAt
+        );
+
+        setRecentApplications(sortedApplications.slice(0, 5)); // Show 5 most recent
+        setJobPostings(jobs);
 
         setLoading(false);
       } catch (error) {
@@ -232,6 +129,8 @@ const CompanyDashboard = () => {
         return `${baseClasses} bg-error-100 text-error-800`;
       case "hired":
         return `${baseClasses} bg-accent-100 text-accent-800`;
+      case "interviewing":
+        return `${baseClasses} bg-info-100 text-info-800`;
       default:
         return baseClasses;
     }
@@ -340,6 +239,23 @@ const CompanyDashboard = () => {
             <div>
               <p className="text-gray-400 text-sm">Hired</p>
               <h3 className="text-2xl font-bold text-white">{stats.hired}</h3>
+            </div>
+          </div>
+        </div>
+
+        <div className="card hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
+          <div className="flex items-center">
+            <div className="rounded-full bg-info-700/30 p-3 mr-4">
+              <FontAwesomeIcon
+                icon="comments"
+                className="text-info-500 text-xl"
+              />
+            </div>
+            <div>
+              <p className="text-gray-400 text-sm">Interviews</p>
+              <h3 className="text-2xl font-bold text-white">
+                {stats.interviewing}
+              </h3>
             </div>
           </div>
         </div>

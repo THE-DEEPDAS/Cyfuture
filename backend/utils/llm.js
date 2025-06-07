@@ -25,20 +25,30 @@ const calculateSkillsMatch = (requiredSkills, candidateSkills) => {
 
 const calculateExperienceMatchScore = (job, candidate) => {
   const requiredYears = job.experience?.minYears || 0;
-  const candidateYears =
-    candidate.experience?.reduce((total, exp) => {
-      try {
-        const start = new Date(exp.startDate);
-        const end =
-          exp.endDate === "Present" ? new Date() : new Date(exp.endDate);
-        const months =
-          (end.getFullYear() - start.getFullYear()) * 12 +
-          (end.getMonth() - start.getMonth());
-        return total + months / 12;
-      } catch (error) {
-        return total;
-      }
-    }, 0) || 0;
+  const candidateYears = Array.isArray(candidate.experience)
+    ? candidate.experience.reduce((total, exp) => {
+        try {
+          if (!exp?.startDate) return total;
+
+          const start = new Date(exp.startDate);
+          if (isNaN(start.getTime())) return total;
+
+          const end =
+            exp.endDate === "Present" || !exp.endDate
+              ? new Date()
+              : new Date(exp.endDate);
+          if (isNaN(end.getTime())) return total;
+
+          const months =
+            (end.getFullYear() - start.getFullYear()) * 12 +
+            (end.getMonth() - start.getMonth());
+          return total + months / 12;
+        } catch (error) {
+          console.warn("Error calculating experience duration:", error);
+          return total;
+        }
+      }, 0)
+    : 0;
 
   return Math.min(candidateYears / Math.max(requiredYears, 1), 1);
 };

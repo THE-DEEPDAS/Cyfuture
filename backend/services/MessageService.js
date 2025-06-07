@@ -12,6 +12,8 @@ class MessageService {
     this.messageCache = new Map();
     this.CACHE_TTL = 5 * 60 * 1000; // 5 minutes
     this.MAX_CACHE_SIZE = 1000;
+    this.MAX_RETRIES = 3;
+    this.RETRY_DELAY = 1000; // 1 second
 
     // Initialize message queue handler
     messageQueue.setFlushHandler(async (conversationId, messages) => {
@@ -49,44 +51,104 @@ class MessageService {
         type,
         metadata,
         readBy: [senderId],
+        deliveryStatus: "sending",
       });
 
-      // Add to message queue for batch processing
+      // Add to message queue for batch processing with retry logic
       messageQueue.add(conversationId, message);
 
-      return message;
+      let retryCount = 0;
+      const retryOperation = async () => {
+        try {
+          await this.processMessage(message);
+          await Message.findByIdAndUpdate(message._id, {
+            deliveryStatus: "delivered",
+          });
+          return message;
+        } catch (error) {
+          retryCount++;
+          if (retryCount < this.MAX_RETRIES) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, this.RETRY_DELAY * retryCount)
+            );
+            return retryOperation();
+          }
+          await Message.findByIdAndUpdate(message._id, {
+            deliveryStatus: "failed",
+            error: error.message,
+          });
+          throw error;
+        }
+      };
+
+      return retryOperation();
     } catch (error) {
       console.error("Error sending message:", error);
       throw error;
     }
   }
+
+  async processMessage(message) {
+    try {
+      // Update conversation
+      await Conversation.findByIdAndUpdate(message.conversation, {
+        lastMessage: message._id,
+        lastMessageAt: message.createdAt,
+        $inc: { messageCount: 1 },
+      });
+
+      // Emit real-time update through socket if available
+      const io = global.io;
+      if (io) {
+        const room = `conversation:${message.conversation}`;
+        io.to(room).emit("new_message", message);
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Error processing message:", error);
+      throw error;
+    }
+  }
+
   async sendMessagesBatch(messages) {
     try {
       // Save messages in batch
-      await Message.insertMany(messages);
+      const savedMessages = await Message.insertMany(
+        messages.map((msg) => ({ ...msg, deliveryStatus: "sending" }))
+      );
 
-      // Update conversation last message
-      if (messages.length > 0) {
-        const lastMessage = messages[messages.length - 1];
-        await Conversation.findByIdAndUpdate(lastMessage.conversation, {
-          lastMessage: lastMessage._id,
-          lastMessageAt: lastMessage.createdAt,
-        });
-      }
-    } catch (error) {
-      console.error("Error sending messages batch:", error);
-      // Add failed messages to retry queue
-      messages.forEach((message) => {
-        retryManager.addToQueue(async () => {
-          await this.sendMessage(
-            message.conversation,
-            message.sender,
-            message.content,
-            message.type,
-            message.metadata
-          );
-        });
+      const processingPromises = savedMessages.map(async (message) => {
+        try {
+          await this.processMessage(message);
+          await Message.findByIdAndUpdate(message._id, {
+            deliveryStatus: "delivered",
+          });
+        } catch (error) {
+          console.error(`Failed to process message ${message._id}:`, error);
+          await Message.findByIdAndUpdate(message._id, {
+            deliveryStatus: "failed",
+            error: error.message,
+          });
+        }
       });
+
+      await Promise.allSettled(processingPromises);
+
+      // Get final status of all messages
+      const updatedMessages = await Message.find({
+        _id: { $in: savedMessages.map((m) => m._id) },
+      });
+
+      return {
+        successful: updatedMessages.filter(
+          (m) => m.deliveryStatus === "delivered"
+        ),
+        failed: updatedMessages.filter((m) => m.deliveryStatus === "failed"),
+      };
+    } catch (error) {
+      console.error("Error in batch message processing:", error);
+      throw error;
     }
   }
 

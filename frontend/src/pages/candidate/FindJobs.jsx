@@ -516,16 +516,25 @@ const FindJobs = () => {
             question: q._id,
             response: response,
           };
-        }) || [];
-
-      // Validate screening responses
+        }) || []; // Validate screening responses
       if (selectedJob.screeningQuestions?.length > 0) {
-        const emptyResponses = screeningResponses.some(
-          (response) => !response.response.trim()
+        const invalidResponses = selectedJob.screeningQuestions.filter(
+          (question, index) => {
+            if (!question.required) return false;
+            const response = screeningResponses[index];
+            return (
+              !response || !response.response || response.response.trim() === ""
+            );
+          }
         );
-        if (emptyResponses) {
+
+        if (invalidResponses.length > 0) {
           toast.dismiss(loadingToast);
-          toast.error("Please answer all screening questions");
+          toast.error(
+            `Please answer the following required questions:\n${invalidResponses
+              .map((q) => q.question)
+              .join("\n")}`
+          );
           return;
         }
       }

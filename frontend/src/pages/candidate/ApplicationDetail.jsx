@@ -108,9 +108,7 @@ const ApplicationDetail = () => {
       }));
 
       // Clear input
-      setMessage("");
-
-      // Make API call
+      setMessage(""); // Make API call
       const response = await api.post(`/applications/${id}/messages`, {
         content: message,
       });
@@ -121,14 +119,31 @@ const ApplicationDetail = () => {
           ...prev,
           messages: response.data,
         }));
+      } else if (
+        response.data &&
+        response.data.messages &&
+        Array.isArray(response.data.messages)
+      ) {
+        // Handle case where full application object is returned
+        setApplication((prev) => ({
+          ...prev,
+          messages: response.data.messages,
+        }));
       } else {
         console.warn(
           "Received unexpected message format from API:",
           response.data
         );
         // Attempt to fetch fresh application data
-        const updatedApplication = await api.get(`/applications/${id}`);
-        setApplication(updatedApplication.data);
+        const updatedApplication = await api.get(
+          `/applications/${id}/messages`
+        );
+        if (updatedApplication.data && Array.isArray(updatedApplication.data)) {
+          setApplication((prev) => ({
+            ...prev,
+            messages: updatedApplication.data,
+          }));
+        }
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -165,19 +180,32 @@ const ApplicationDetail = () => {
       console.error("Error updating status:", error);
       toast.error("Failed to update application status");
     }
-  };
-  // Handle real-time updates
+  }; // Handle real-time updates
   useEffect(() => {
-    // Instead of using subscriptions that don't exist, let's poll for updates
+    // Poll for updates
     const pollInterval = setInterval(async () => {
       try {
         // Only poll if we have an application
         if (id) {
-          const response = await api.get(`/applications/${id}`);
-          setApplication(response.data);
+          const response = await api.get(`/applications/${id}/messages`);
+
+          // Update messages if we have data
+          if (response.data && Array.isArray(response.data)) {
+            setApplication((prev) => ({
+              ...prev,
+              messages: response.data,
+            }));
+          }
         }
       } catch (error) {
-        console.error("Error polling for updates:", error);
+        // Only log critical errors, not 403/401 which might happen during transitions
+        if (
+          error.response &&
+          error.response.status !== 403 &&
+          error.response.status !== 401
+        ) {
+          console.error("Error polling for updates:", error);
+        }
       }
     }, 10000); // Poll every 10 seconds
 
@@ -376,20 +404,40 @@ const ApplicationDetail = () => {
         {/* Messages */}
         <div className="lg:col-span-2">
           <div className="bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col">
+            {" "}
             <div className="p-6 border-b">
-              <h2 className="text-xl font-bold">Messages</h2>
+              <h2 className="text-xl font-bold flex items-center">
+                Messages
+                {application.messages.some(
+                  (msg) => msg.sender === "system"
+                ) && (
+                  <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full flex items-center">
+                    <FontAwesomeIcon icon={faRobot} className="mr-1" />
+                    Interview Active
+                  </span>
+                )}
+              </h2>
               {user?.role === "candidate" && (
-                <div className="mt-2 text-sm text-gray-600">
-                  This is your interview chat. Answer the questions from the AI
-                  interviewer to improve your chances of getting shortlisted.
+                <div className="mt-2">
+                  <p className="text-sm text-gray-600 mb-1">
+                    This is your interview chat. Answer the questions from the
+                    AI interviewer to improve your chances of getting
+                    shortlisted.
+                  </p>
+                  <div className="bg-blue-50 border border-blue-200 rounded-md p-2 text-xs text-blue-700">
+                    <strong>Tips:</strong> Be detailed in your responses. The AI
+                    will evaluate your answers based on relevance to the job
+                    requirements. If you see an interview question, make sure to
+                    answer all parts of it.
+                  </div>
                 </div>
               )}
             </div>
-
             <div
               className="flex-grow overflow-y-auto p-6"
               style={{ maxHeight: "600px" }}
             >
+              {" "}
               <div className="space-y-4">
                 {application.messages.length > 0 ? (
                   application.messages.map((msg, index) => (
@@ -410,8 +458,7 @@ const ApplicationDetail = () => {
                             className="text-gray-500"
                           />
                         </div>
-                      )}
-
+                      )}{" "}
                       <div>
                         <div
                           className={`max-w-md p-3 rounded-lg ${
@@ -419,11 +466,28 @@ const ApplicationDetail = () => {
                             (user.role === "company" ? "company" : "candidate")
                               ? "bg-primary text-white ml-auto"
                               : msg.sender === "system"
-                              ? "bg-gray-100 text-gray-800"
+                              ? "bg-blue-100 text-gray-800 border border-blue-200"
                               : "bg-gray-200 text-gray-800"
                           }`}
                         >
-                          {msg.content}
+                          {msg.sender === "system" ? (
+                            <div>
+                              <div className="font-medium text-blue-600 mb-1">
+                                <span className="flex items-center">
+                                  <FontAwesomeIcon
+                                    icon={faRobot}
+                                    className="mr-1"
+                                  />
+                                  AI Interviewer
+                                </span>
+                              </div>
+                              <div className="whitespace-pre-line text-gray-800">
+                                {msg.content}
+                              </div>
+                            </div>
+                          ) : (
+                            msg.content
+                          )}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
                           {msg.createdAt && formatDate(msg.createdAt)}
@@ -439,7 +503,6 @@ const ApplicationDetail = () => {
                 <div ref={chatEndRef} />
               </div>
             </div>
-
             <div className="p-4 border-t">
               <div className="flex items-center">
                 <input

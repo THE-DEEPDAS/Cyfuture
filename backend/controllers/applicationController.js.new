@@ -141,8 +141,7 @@ export const applyToJob = asyncHandler(async (req, res) => {
       const sendApplicationNotification = async (application, job, analysis) => {
         // Notify company about new application
         await notifyUser(
-          job.company._id,
-          "APPLICATION_RECEIVED",
+          job.company._id,          "application",
           "New Job Application",
           `${req.user.name} has applied for ${job.title}`,
           {
@@ -173,8 +172,7 @@ export const applyToJob = asyncHandler(async (req, res) => {
           );
         } else {
           await notifyUser(
-            req.user._id,
-            "APPLICATION_RECEIVED",
+            req.user._id,            "application",
             "Application Received",
             `Your application for ${job.title} has been received and is under review.`,
             {

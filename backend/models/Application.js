@@ -53,7 +53,8 @@ const applicationSchema = new mongoose.Schema(
       max: 100,
       default: 0,
       index: true,
-    },    rejectionReason: {
+    },
+    rejectionReason: {
       type: String,
       required: false,
     },
@@ -70,10 +71,10 @@ const applicationSchema = new mongoose.Schema(
           response: String,
           evaluation: String,
           score: Number,
-          timestamp: Date
-        }
+          timestamp: Date,
+        },
       ],
-      updatedAt: Date
+      updatedAt: Date,
     },
     llmAnalysis: {
       explanation: String,
@@ -110,6 +111,10 @@ const applicationSchema = new mongoose.Schema(
           type: String,
           enum: ["candidate", "company", "system"],
           required: true,
+        },
+        senderProfile: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
         },
         content: {
           type: String,

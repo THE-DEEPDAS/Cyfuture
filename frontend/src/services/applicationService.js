@@ -31,6 +31,11 @@ export const sendApplicationMessage = async (applicationId, content) => {
     });
     return response.data;
   } catch (error) {
+    // Add specific error message for 403 errors
+    if (error.response && error.response.status === 403) {
+      error.customMessage =
+        "You don't have permission to send messages for this application.";
+    }
     throw error;
   }
 };

@@ -23,6 +23,7 @@ import {
   rejectApplication,
   hireCandidate,
   startAutomatedInterview,
+  getCandidates,
 } from "../controllers/applicationController.js";
 
 const router = express.Router();
@@ -90,5 +91,8 @@ router.get(
   companyOnly,
   getMatchingScores
 );
+
+// @route   GET /api/applications/candidates
+router.get("/candidates", protect, companyOnly, getCandidates);
 
 export default router;

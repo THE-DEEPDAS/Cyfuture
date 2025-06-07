@@ -34,115 +34,56 @@ const Analytics = () => {
   const [loading, setLoading] = useState(true);
   const [timeframe, setTimeframe] = useState("month");
   const [view, setView] = useState("overview");
+  const [error, setError] = useState(null);
 
-  // Fetch analytics data on component mount
+  // Fetch analytics data on component mount and timeframe change
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        setError(null);
 
-        // Fetch analytics data from API
-        const analyticsResponse = await axios.get(
-          `/api/applications/analytics?timeframe=${timeframe}`
-        );
-        setAnalytics(analyticsResponse.data);
-
-        // Fetch recent applications
-        const applicationsResponse = await axios.get("/api/applications");
-        setApplications(applicationsResponse.data);
-      } catch (error) {
-        console.error("Error fetching analytics:", error);
-
-        // Set sample data for development/demo
-        setAnalytics({
-          totalApplications: 14,
-          applicationsByStatus: {
-            pending: 5,
-            reviewing: 3,
-            shortlisted: 2,
-            rejected: 3,
-            hired: 1,
-          },
-          applicationsByMonth: [2, 4, 3, 5],
-          responseRate: 70,
-          averageMatchScore: 78,
-          applicationsByIndustry: {
-            Technology: 6,
-            Finance: 3,
-            Healthcare: 2,
-            Marketing: 2,
-            Education: 1,
-          },
-          applicationsByJobType: {
-            "Full-time": 8,
-            "Part-time": 2,
-            Contract: 3,
-            Internship: 1,
-          },
-          topSkillsInDemand: [
-            { skill: "React", count: 8 },
-            { skill: "JavaScript", count: 10 },
-            { skill: "Node.js", count: 6 },
-            { skill: "TypeScript", count: 5 },
-            { skill: "MongoDB", count: 4 },
-          ],
+        // Fetch analytics data from API with timeframe parameter
+        const analyticsResponse = await api.get("/api/applications/analytics", {
+          params: { timeframe },
         });
 
-        // Sample applications
-        setApplications([
-          {
-            _id: "1",
-            job: {
-              title: "Senior Frontend Developer",
-              company: "TechCorp",
-              location: "New York, NY",
-            },
-            status: "shortlisted",
-            createdAt: new Date(
-              Date.now() - 10 * 24 * 60 * 60 * 1000
-            ).toISOString(),
-            matchScore: 94,
+        // Validate analytics response data
+        const analyticsData = analyticsResponse.data;
+        if (!analyticsData) {
+          throw new Error("Invalid analytics data received");
+        }
+
+        setAnalytics({
+          totalApplications: analyticsData.totalApplications || 0,
+          applicationsByStatus: analyticsData.applicationsByStatus || {
+            pending: 0,
+            reviewing: 0,
+            shortlisted: 0,
+            rejected: 0,
+            hired: 0,
           },
-          {
-            _id: "2",
-            job: {
-              title: "Backend Developer",
-              company: "DataSystems",
-              location: "Remote",
-            },
-            status: "reviewing",
-            createdAt: new Date(
-              Date.now() - 15 * 24 * 60 * 60 * 1000
-            ).toISOString(),
-            matchScore: 87,
-          },
-          {
-            _id: "3",
-            job: {
-              title: "Full Stack Developer",
-              company: "GrowthStartup",
-              location: "San Francisco, CA",
-            },
-            status: "pending",
-            createdAt: new Date(
-              Date.now() - 5 * 24 * 60 * 60 * 1000
-            ).toISOString(),
-            matchScore: 91,
-          },
-          {
-            _id: "4",
-            job: {
-              title: "DevOps Engineer",
-              company: "CloudSystems",
-              location: "Chicago, IL",
-            },
-            status: "rejected",
-            createdAt: new Date(
-              Date.now() - 20 * 24 * 60 * 60 * 1000
-            ).toISOString(),
-            matchScore: 79,
-          },
-        ]);
+          applicationsByMonth: analyticsData.applicationsByMonth || [],
+          responseRate: analyticsData.responseRate || 0,
+          averageMatchScore: analyticsData.averageMatchScore || 0,
+          applicationsByIndustry: analyticsData.applicationsByIndustry || {},
+          applicationsByJobType: analyticsData.applicationsByJobType || {},
+          topSkillsInDemand: analyticsData.topSkillsInDemand || [],
+        });
+
+        // Fetch recent applications
+        const applicationsResponse = await api.get("/api/applications");
+        if (Array.isArray(applicationsResponse.data)) {
+          const validApplications = applicationsResponse.data.filter(
+            (app) => app && app.job && app.job.title && app.status
+          );
+          setApplications(validApplications);
+        } else {
+          setApplications([]);
+        }
+      } catch (error) {
+        console.error("Error fetching analytics data:", error);
+        setError("Failed to load analytics data. Please try again later.");
       } finally {
         setLoading(false);
       }

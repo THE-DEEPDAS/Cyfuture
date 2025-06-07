@@ -1,5 +1,5 @@
 import api from "../utils/api";
-import { clientMessageQueue } from "../../../frontend/src/utils/messageQueue.js";
+import { clientMessageQueue } from "../utils/messageQueue.js";
 import { retryManager } from "../utils/retryManager";
 import {
   MESSAGE_SEND_REQUEST,
@@ -11,312 +11,262 @@ import {
   CONVERSATIONS_FETCH_REQUEST,
   CONVERSATIONS_FETCH_SUCCESS,
   CONVERSATIONS_FETCH_FAIL,
-  CONVERSATION_CREATE_REQUEST,
-  CONVERSATION_CREATE_SUCCESS,
-  CONVERSATION_CREATE_FAIL,
-  MESSAGE_MARK_READ_REQUEST,
-  MESSAGE_MARK_READ_SUCCESS,
-  MESSAGE_MARK_READ_FAIL,
+  MESSAGE_RETRY_REQUEST,
+  MESSAGE_RETRY_SUCCESS,
+  MESSAGE_RETRY_FAIL,
+  BULK_MESSAGE_PROGRESS,
 } from "../constants/messageConstants";
 
-// Initialize message queue handler
-clientMessageQueue.setFlushHandler(async (conversationId, messages) => {
-  try {
-    return await sendMessagesBatch(conversationId, messages);
-  } catch (error) {
-    console.error("Error in flush handler:", error);
-    throw error;
-  }
-});
-
 let pollInterval;
+let offlineQueue = [];
+let isOnline = navigator.onLine;
 
-// Start polling for new messages
+// Handle offline/online status
+window.addEventListener("online", handleOnline);
+window.addEventListener("offline", handleOffline);
+
+function handleOnline() {
+  isOnline = true;
+  // Process queued messages
+  while (offlineQueue.length > 0) {
+    const { message, dispatch } = offlineQueue.shift();
+    sendMessage(message)(dispatch);
+  }
+}
+
+function handleOffline() {
+  isOnline = false;
+}
+
+// Start polling for new messages with exponential backoff
 export const startMessagePolling = (userId) => async (dispatch) => {
   if (pollInterval) {
     clearInterval(pollInterval);
   }
+
+  let retryCount = 0;
+  const maxRetries = 5;
+  const baseDelay = 5000; // 5 seconds
+
   const pollMessages = async () => {
-    const lastPoll = localStorage.getItem("lastMessagePoll") || 0;
-    const { data } = await api.get(`/api/messages/updates?since=${lastPoll}`);
-
-    if (data.messages && data.messages.length > 0) {
-      dispatch({
-        type: MESSAGES_FETCH_SUCCESS,
-        payload: data.messages,
-      });
+    if (!isOnline) {
+      console.log("Offline - skipping poll");
+      return;
     }
 
-    localStorage.setItem("lastMessagePoll", Date.now());
-  };
-
-  // Poll immediately and then every 5 seconds
-  await pollMessages();
-  pollInterval = setInterval(pollMessages, 5000);
-};
-
-// Fetch all conversations
-export const fetchConversations = () => async (dispatch) => {
-  try {
-    dispatch({ type: CONVERSATIONS_FETCH_REQUEST });
-
-    const operationId = "fetch_conversations";
-    const data = await retryManager.execute(operationId, async () => {
-      const { data } = await api.get("/messages/conversations");
-      return data;
-    });
-
-    dispatch({
-      type: CONVERSATIONS_FETCH_SUCCESS,
-      payload: data,
-    });
-  } catch (error) {
-    dispatch({
-      type: CONVERSATIONS_FETCH_FAIL,
-      payload: error.response?.data?.message || error.message,
-    });
-  }
-};
-
-// Fetch messages for a conversation
-export const fetchMessages =
-  (conversationId, page = 1) =>
-  async (dispatch) => {
     try {
-      dispatch({ type: MESSAGES_FETCH_REQUEST });
+      const lastPoll = localStorage.getItem("lastMessagePoll") || 0;
+      const { data } = await api.get(`/messages/updates?since=${lastPoll}`);
 
-      const operationId = `fetch_messages_${conversationId}_${page}`;
-      const data = await retryManager.execute(operationId, async () => {
-        const { data } = await api.get(
-          `/messages/conversations/${conversationId}?page=${page}`
-        );
-        return data;
-      });
-
-      dispatch({
-        type: MESSAGES_FETCH_SUCCESS,
-        payload: {
-          conversationId,
-          messages: data.messages,
-          hasMore: data.hasMore,
-          page: data.page,
-        },
-      });
-    } catch (error) {
-      dispatch({
-        type: MESSAGES_FETCH_FAIL,
-        payload: error.response?.data?.message || error.message,
-      });
-    }
-  };
-
-// Send a new message
-export const sendMessage =
-  (conversationId, content, type = "text", metadata = {}, options = {}) =>
-  async (dispatch) => {
-    try {
-      dispatch({ type: MESSAGE_SEND_REQUEST });
-
-      const message = {
-        conversationId,
-        content,
-        type,
-        metadata,
-      };
-
-      if (options.immediate) {
-        // Send immediately
-        const operationId = `send_message_${conversationId}_${Date.now()}`;
-        const data = await retryManager.execute(operationId, async () => {
-          const { data } = await api.post(
-            `/messages/conversations/${conversationId}`,
-            message
-          );
-          return data;
-        });
-
-        // Emit message via socket for real-time delivery
-        emitMessage({
-          ...data,
-          conversationId,
-        });
-
+      if (data.messages && data.messages.length > 0) {
         dispatch({
-          type: MESSAGE_SEND_SUCCESS,
-          payload: data,
+          type: MESSAGES_FETCH_SUCCESS,
+          payload: data.messages,
         });
-
-        return data;
-      } else {
-        // Add to batch queue
-        clientMessageQueue.add(message);
-        dispatch({
-          type: MESSAGE_SEND_SUCCESS,
-          payload: { queued: true, message },
-        });
-        return { queued: true, message };
       }
+
+      localStorage.setItem("lastMessagePoll", Date.now());
+      retryCount = 0; // Reset retry count on successful poll
     } catch (error) {
-      dispatch({
-        type: MESSAGE_SEND_FAIL,
-        payload: error.response?.data?.message || error.message,
-      });
-      throw error;
+      console.error("Error polling messages:", error);
+      retryCount++;
+
+      if (retryCount >= maxRetries) {
+        console.log("Max retries reached - stopping poll");
+        clearInterval(pollInterval);
+      }
     }
   };
 
-// Create a new conversation
-export const createConversation =
-  (participants, type = "individual", metadata = {}) =>
-  async (dispatch) => {
-    try {
-      dispatch({ type: CONVERSATION_CREATE_REQUEST });
+  // Initial poll
+  await pollMessages();
 
-      const operationId = `create_conversation_${Date.now()}`;
-      const data = await retryManager.execute(operationId, async () => {
-        const { data } = await api.post("/messages/conversations", {
-          participants,
-          type,
-          metadata,
-        });
-        return data;
-      });
-
-      // Join the new conversation room
-      joinConversation(data._id);
-
-      dispatch({
-        type: CONVERSATION_CREATE_SUCCESS,
-        payload: data,
-      });
-
-      return data;
-    } catch (error) {
-      dispatch({
-        type: CONVERSATION_CREATE_FAIL,
-        payload: error.response?.data?.message || error.message,
-      });
-      throw error;
-    }
+  // Set up polling with exponential backoff
+  const getPollingDelay = () => {
+    return baseDelay * Math.pow(2, Math.min(retryCount, 4)); // Max 80 seconds
   };
 
-// Mark messages as read
-export const markMessagesAsRead = (conversationId) => async (dispatch) => {
+  pollInterval = setInterval(async () => {
+    await pollMessages();
+    // Adjust interval based on retry count
+    if (retryCount > 0) {
+      clearInterval(pollInterval);
+      pollInterval = setInterval(pollMessages, getPollingDelay());
+    }
+  }, baseDelay);
+};
+
+// Send message with offline support
+export const sendMessage = (message) => async (dispatch) => {
   try {
-    dispatch({ type: MESSAGE_MARK_READ_REQUEST });
+    dispatch({ type: MESSAGE_SEND_REQUEST });
 
-    const operationId = `mark_read_${conversationId}_${Date.now()}`;
+    if (!isOnline) {
+      // Queue message for later
+      offlineQueue.push({ message, dispatch });
+
+      dispatch({
+        type: MESSAGE_SEND_SUCCESS,
+        payload: { ...message, pending: true },
+      });
+      return;
+    }
+
+    const operationId = `send_message_${message.conversationId}_${Date.now()}`;
     const data = await retryManager.execute(operationId, async () => {
-      const { data } = await api.put(
-        `/messages/conversations/${conversationId}/read`
+      const { data } = await api.post(
+        `/messages/conversations/${message.conversationId}`,
+        message
       );
       return data;
     });
 
-    // Emit read status via socket
-    emitMarkRead(conversationId);
+    // Emit message via socket for real-time delivery
+    emitMessage({
+      ...data,
+      conversationId: message.conversationId,
+    });
 
     dispatch({
-      type: MESSAGE_MARK_READ_SUCCESS,
-      payload: {
-        conversationId,
-        data,
-      },
+      type: MESSAGE_SEND_SUCCESS,
+      payload: data,
     });
+
+    return data;
   } catch (error) {
     dispatch({
-      type: MESSAGE_MARK_READ_FAIL,
+      type: MESSAGE_SEND_FAIL,
       payload: error.response?.data?.message || error.message,
     });
+    throw error;
   }
 };
 
-// User typing indicator
-export const setTypingStatus =
-  (conversationId, isTyping) => async (dispatch) => {
-    emitTyping(conversationId, isTyping);
-  };
+// Retry failed messages
+export const retryFailedMessages = (failedMessages) => async (dispatch) => {
+  try {
+    dispatch({ type: MESSAGE_RETRY_REQUEST });
 
-// Leave conversation
-export const exitConversation = (conversationId) => async (dispatch) => {
-  leaveConversation(conversationId);
+    const results = await Promise.allSettled(
+      failedMessages.map(async (message) => {
+        const operationId = `retry_message_${message.id}_${Date.now()}`;
+        try {
+          const data = await retryManager.execute(operationId, async () => {
+            const response = await api.post(
+              `/messages/conversations/${message.conversationId}`,
+              message
+            );
+            return response.data;
+          });
+          return { success: true, data };
+        } catch (error) {
+          return { success: false, error, message };
+        }
+      })
+    );
+
+    const successful = results
+      .filter((result) => result.status === "fulfilled" && result.value.success)
+      .map((result) => result.value.data);
+
+    const failed = results
+      .filter((result) => result.status === "rejected" || !result.value.success)
+      .map((result) => result.value.message);
+
+    dispatch({
+      type: MESSAGE_RETRY_SUCCESS,
+      payload: { successful, failed },
+    });
+
+    return { successful, failed };
+  } catch (error) {
+    dispatch({
+      type: MESSAGE_RETRY_FAIL,
+      payload: error.response?.data?.message || error.message,
+    });
+    throw error;
+  }
 };
 
-// Bulk message sending
+// Send bulk messages with progress tracking and retry support
 export const sendBulkMessages =
-  (recipients, messageTemplate, batchSize = 10) =>
+  (messages, options = {}) =>
   async (dispatch) => {
     try {
-      dispatch({ type: MESSAGE_SEND_REQUEST });
+      const batchSize = options.batchSize || 10;
+      const batches = [];
+
+      // Split messages into batches
+      for (let i = 0; i < messages.length; i += batchSize) {
+        batches.push(messages.slice(i, i + batchSize));
+      }
 
       const results = {
         successful: [],
         failed: [],
       };
 
-      // Process recipients in batches
-      for (let i = 0; i < recipients.length; i += batchSize) {
-        const batch = recipients.slice(i, i + batchSize);
-        const batchPromises = batch.map(async (recipient) => {
-          const operationId = `bulk_message_${recipient._id}_${Date.now()}`;
-          try {
-            return await retryManager.execute(operationId, async () => {
-              const message = {
-                ...messageTemplate,
-                recipientId: recipient._id,
-              };
+      // Process each batch
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        const current = i * batchSize;
 
-              const { data } = await api.post("/messages/send", message);
-              emitMessage(data);
-              return { success: true, data };
-            });
-          } catch (error) {
-            return {
-              success: false,
-              recipientId: recipient._id,
-              error: error.response?.data?.message || error.message,
-            };
-          }
-        });
-
-        const batchResults = await Promise.allSettled(batchPromises);
-
-        batchResults.forEach((result) => {
-          if (result.status === "fulfilled" && result.value.success) {
-            results.successful.push(result.value.data);
-          } else {
-            results.failed.push(result.value);
-          }
-        });
-
-        // Update progress after each batch
+        // Update progress
         dispatch({
-          type: "BULK_MESSAGE_PROGRESS",
+          type: BULK_MESSAGE_PROGRESS,
           payload: {
-            processed: Math.min(i + batchSize, recipients.length),
-            total: recipients.length,
+            current,
+            total: messages.length,
             successful: results.successful.length,
             failed: results.failed.length,
           },
         });
+
+        // Send batch
+        const batchResults = await Promise.allSettled(
+          batch.map(async (message) => {
+            try {
+              const operationId = `bulk_msg_${
+                message.recipientId
+              }_${Date.now()}`;
+              const response = await retryManager.execute(
+                operationId,
+                async () => {
+                  const { data } = await api.post("/messages/bulk", message);
+                  return data;
+                }
+              );
+              return { success: true, data: response };
+            } catch (error) {
+              return { success: false, error, message };
+            }
+          })
+        );
+
+        // Process batch results
+        batchResults.forEach((result) => {
+          if (result.status === "fulfilled" && result.value.success) {
+            results.successful.push(result.value.data);
+          } else {
+            results.failed.push(
+              result.status === "rejected"
+                ? result.reason.message
+                : result.value.message
+            );
+          }
+        });
       }
 
+      // Final progress update
       dispatch({
-        type: MESSAGE_SEND_SUCCESS,
+        type: BULK_MESSAGE_PROGRESS,
         payload: {
-          successful: results.successful,
-          failed: results.failed,
+          current: messages.length,
+          total: messages.length,
+          successful: results.successful.length,
+          failed: results.failed.length,
         },
       });
-
-      // Retry failed messages if any
-      if (results.failed.length > 0) {
-        const retryResults = await dispatch(
-          retryFailedMessages(results.failed)
-        );
-        results.successful.push(...retryResults.successful);
-        results.failed = retryResults.failed;
-      }
 
       return results;
     } catch (error) {
@@ -327,73 +277,3 @@ export const sendBulkMessages =
       throw error;
     }
   };
-
-// Retry failed messages
-export const retryFailedMessages =
-  (failedMessages, maxRetries = 3) =>
-  async (dispatch) => {
-    try {
-      dispatch({ type: "MESSAGE_RETRY_REQUEST" });
-
-      const retryResults = {
-        successful: [],
-        failed: [],
-      };
-
-      for (const failedMessage of failedMessages) {
-        const operationId = `retry_message_${
-          failedMessage.recipientId
-        }_${Date.now()}`;
-        try {
-          const data = await retryManager.execute(operationId, async () => {
-            const { data } = await api.post("/messages/send", {
-              recipientId: failedMessage.recipientId,
-              content: failedMessage.content,
-            });
-            return data;
-          });
-
-          retryResults.successful.push(data);
-          emitMessage(data);
-        } catch (error) {
-          retryResults.failed.push({
-            ...failedMessage,
-            error: error.response?.data?.message || error.message,
-          });
-        }
-      }
-
-      dispatch({
-        type: "MESSAGE_RETRY_SUCCESS",
-        payload: {
-          successful: retryResults.successful,
-          failed: retryResults.failed,
-        },
-      });
-
-      return retryResults;
-    } catch (error) {
-      dispatch({
-        type: "MESSAGE_RETRY_FAIL",
-        payload: error.response?.data?.message || error.message,
-      });
-      throw error;
-    }
-  };
-
-// Helper function to send batched messages
-const sendMessagesBatch = async (conversationId, messages) => {
-  const operationId = `send_messages_batch_${conversationId}_${Date.now()}`;
-  try {
-    return await retryManager.execute(operationId, async () => {
-      const { data } = await api.post(
-        `/messages/conversations/${conversationId}/batch`,
-        { messages }
-      );
-      return data;
-    });
-  } catch (error) {
-    console.error("Error sending message batch:", error);
-    throw error;
-  }
-};

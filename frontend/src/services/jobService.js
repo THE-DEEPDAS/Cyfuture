@@ -29,9 +29,29 @@ const API_ENDPOINTS = {
 
 const handleApiError = (error) => {
   if (error.response) {
-    throw new Error(error.response.data.message || "An error occurred");
+    // Server responded with an error
+    if (error.response.status === 400) {
+      throw new Error(
+        error.response.data.message ||
+          "Please check all required fields and try again"
+      );
+    } else if (error.response.status === 404) {
+      throw new Error("This position is no longer available");
+    } else if (error.response.status === 403) {
+      throw new Error("You don't have permission to apply for this job");
+    } else {
+      throw new Error(
+        error.response.data.message ||
+          "An error occurred while submitting your application"
+      );
+    }
+  } else if (error.message?.includes("already applied")) {
+    throw error; // Pass through the duplicate application error
+  } else {
+    throw new Error(
+      "Network error. Please check your connection and try again"
+    );
   }
-  throw error;
 };
 
 const formatSalaryRange = (min, max, currency = "USD") => {

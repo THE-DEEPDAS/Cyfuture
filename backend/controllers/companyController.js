@@ -1,64 +1,133 @@
 import asyncHandler from "express-async-handler";
 import Job from "../models/jobModel.js";
 import User from "../models/userModel.js";
+import Application from "../models/applicationModel.js";
+import mongoose from "mongoose";
 
 // @desc    Get company dashboard stats
 // @route   GET /api/company/dashboard
 // @access  Private/Company
 const getCompanyDashboardStats = asyncHandler(async (req, res) => {
-  // Get all jobs for this company
-  const jobs = await Job.find({ admin: req.user._id });
+  // Get total active and closed jobs count
+  const jobsStats = await Job.aggregate([
+    {
+      $match: {
+        company: new mongoose.Types.ObjectId(req.user._id),
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalJobs: { $sum: 1 },
+        openJobs: {
+          $sum: {
+            $cond: [{ $eq: ["$isActive", true] }, 1, 0],
+          },
+        },
+      },
+    },
+  ]);
 
-  // Calculate statistics
-  const totalJobs = jobs.length;
-  const openJobs = jobs.filter((job) => job.status === "Open").length;
-  const closedJobs = jobs.filter((job) => job.status === "Closed").length;
+  const jobStats = jobsStats[0] || { totalJobs: 0, openJobs: 0 };
+  const closedJobs = jobStats.totalJobs - jobStats.openJobs;
 
-  // Get total applications across all jobs
-  const totalApplications = jobs.reduce(
-    (acc, job) => acc + job.applications.length,
-    0
-  );
+  // Get all jobs IDs for this company
+  const jobs = await Job.find({ company: req.user._id }).select("_id");
+  const jobIds = jobs.map((job) => job._id);
 
-  // Get applications by status
-  const applicationsByStatus = {
-    Applied: 0,
-    Shortlisted: 0,
-    Rejected: 0,
-    Interviewing: 0,
-    Hired: 0,
+  // Default response if no jobs
+  if (!jobIds.length) {
+    return res.json({
+      totalJobs: 0,
+      openJobs: 0,
+      closedJobs: 0,
+      totalApplications: 0,
+      applicationsByStatus: {
+        pending: 0,
+        reviewing: 0,
+        shortlisted: 0,
+        accepted: 0,
+        rejected: 0,
+        hired: 0,
+      },
+      averageMatchScore: 0,
+    });
+  }
+
+  // Get application statistics using aggregation
+  const applicationStats = await Application.aggregate([
+    {
+      $match: {
+        job: { $in: jobIds },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalApplications: { $sum: 1 },
+        applicationsByStatus: {
+          $push: "$status",
+        },
+        validMatchScores: {
+          $push: {
+            $cond: [
+              {
+                $and: [
+                  { $ne: ["$matchScore", null] },
+                  { $ne: ["$matchScore", undefined] },
+                  { $gte: ["$matchScore", 0] },
+                  { $lte: ["$matchScore", 100] },
+                ],
+              },
+              "$matchScore",
+              null,
+            ],
+          },
+        },
+      },
+    },
+  ]);
+
+  // Process application statistics
+  const stats = applicationStats[0] || {
+    totalApplications: 0,
+    applicationsByStatus: [],
+    validMatchScores: [],
   };
 
-  jobs.forEach((job) => {
-    job.applications.forEach((app) => {
-      if (applicationsByStatus[app.status] !== undefined) {
-        applicationsByStatus[app.status]++;
-      }
-    });
+  // Count applications by status
+  const applicationsByStatus = {
+    pending: 0,
+    reviewing: 0,
+    shortlisted: 0,
+    accepted: 0,
+    rejected: 0,
+    hired: 0,
+  };
+
+  stats.applicationsByStatus.forEach((status) => {
+    if (applicationsByStatus.hasOwnProperty(status)) {
+      applicationsByStatus[status]++;
+    }
   });
 
   // Calculate average match score
-  let totalMatchScore = 0;
-  let matchScoreCount = 0;
-
-  jobs.forEach((job) => {
-    job.applications.forEach((app) => {
-      if (app.matchScore) {
-        totalMatchScore += app.matchScore;
-        matchScoreCount++;
-      }
-    });
-  });
-
+  const validScores = stats.validMatchScores.filter((score) => score !== null);
   const averageMatchScore =
-    matchScoreCount > 0 ? (totalMatchScore / matchScoreCount).toFixed(2) : 0;
+    validScores.length > 0
+      ? parseFloat(
+          (validScores.reduce((a, b) => a + b, 0) / validScores.length).toFixed(
+            2
+          )
+        )
+      : 0;
 
-  // Return stats
+  // Return complete stats
   res.json({
-    totalJobs,
-    openJobs,
+    totalJobs: jobStats.totalJobs,
+    openJobs: jobStats.openJobs,
     closedJobs,
-    totalApplications,
+    totalApplications: stats.totalApplications,
     applicationsByStatus,
     averageMatchScore,
   });
@@ -68,28 +137,60 @@ const getCompanyDashboardStats = asyncHandler(async (req, res) => {
 // @route   GET /api/company/jobs
 // @access  Private/Company
 const getCompanyJobs = asyncHandler(async (req, res) => {
-  const jobs = await Job.find({ admin: req.user._id }).sort({ createdAt: -1 });
+  try {
+    // Get jobs with essential fields
+    const jobs = await Job.find({ company: req.user._id })
+      .select("_id title location jobType status createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
 
-  // Add application count to each job
-  const jobsWithCounts = jobs.map((job) => {
-    const applicationCount = job.applications.length;
-    const shortlistedCount = job.applications.filter(
-      (app) => app.status === "Shortlisted"
-    ).length;
+    if (!jobs.length) {
+      return res.json([]);
+    }
 
-    return {
-      _id: job._id,
-      title: job.title,
-      location: job.location,
-      jobType: job.jobType,
-      status: job.status,
-      createdAt: job.createdAt,
-      applicationCount,
-      shortlistedCount,
-    };
-  });
+    // Get all applications for these jobs in one query
+    const jobIds = jobs.map((job) => job._id);
+    const applications = await Application.aggregate([
+      { $match: { job: { $in: jobIds } } },
+      {
+        $group: {
+          _id: "$job",
+          applicationCount: { $sum: 1 },
+          shortlistedCount: {
+            $sum: { $cond: [{ $eq: ["$status", "shortlisted"] }, 1, 0] },
+          },
+        },
+      },
+    ]); // Create a map of application counts by job ID
+    const applicationCountMap = new Map(
+      applications.map((app) => [
+        app._id.toString(),
+        {
+          applicationCount: app.applicationCount,
+          shortlistedCount: app.shortlistedCount,
+        },
+      ])
+    );
 
-  res.json(jobsWithCounts);
+    // Combine job data with application counts
+    const jobsWithCounts = jobs.map((job) => {
+      const counts = applicationCountMap.get(job._id.toString()) || {
+        applicationCount: 0,
+        shortlistedCount: 0,
+      };
+      return {
+        ...job,
+        applicationCount: counts.applicationCount,
+        shortlistedCount: counts.shortlistedCount,
+      };
+    });
+
+    res.json(jobsWithCounts);
+  } catch (error) {
+    console.error("Error in getCompanyJobs:", error);
+    res.status(500);
+    throw new Error("Failed to fetch company jobs: " + error.message);
+  }
 });
 
 // @desc    Update company profile

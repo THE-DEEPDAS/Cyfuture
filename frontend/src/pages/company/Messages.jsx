@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useAuth } from "../../context/AuthContext.jsx";
 import api from "../../utils/api";
+import toast from "react-hot-toast";
 
 const CompanyMessages = () => {
   const { user } = useAuth();
@@ -15,110 +16,65 @@ const CompanyMessages = () => {
   const [showNewMessageModal, setShowNewMessageModal] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const messagesEndRef = useRef(null);
-
-  // Fetch conversations on component mount
+  // Fetch conversations and candidates on component mount
   useEffect(() => {
-    const fetchConversations = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const response = await api.get("/messages/conversations");
-        setConversations(response.data);
 
-        // Select first conversation if available
-        if (response.data.length > 0 && !activeConversation) {
-          setActiveConversation(response.data[0]);
-        }
+        // Fetch conversations and candidates in parallel
+        const [conversationsResponse, candidatesResponse] = await Promise.all([
+          api.get("/messages/conversations"),
+          api.get("/applications/candidates"),
+        ]); // Update state with fetched data
+        setConversations(conversationsResponse.data);
 
-        // Get candidates for new messages
-        const candidatesResponse = await axios.get(
-          "/api/applications/candidates"
+        // Process and filter candidates
+        const validCandidates = candidatesResponse.data.filter(
+          (candidate) =>
+            candidate &&
+            candidate._id &&
+            candidate.name &&
+            candidate.applicationId // Make sure we have all required data
         );
-        setCandidates(candidatesResponse.data);
-      } catch (error) {
-        console.error("Error fetching conversations:", error);
-        // Set sample data for development
-        const sampleConversations = [
-          {
-            _id: "1",
-            participants: [
-              {
-                _id: user?._id || "1",
-                name: user?.name || "Company User",
-                role: "company",
-                profileImage: null,
-              },
-              {
-                _id: "2",
-                name: "John Doe",
-                role: "candidate",
-                profileImage: null,
-              },
-            ],
-            lastMessage: {
-              content: "We would like to schedule an interview.",
-              createdAt: new Date().toISOString(),
-            },
-            updatedAt: new Date().toISOString(),
-            unreadCount: { [user?._id || "1"]: 0 },
-          },
-          {
-            _id: "2",
-            participants: [
-              {
-                _id: user?._id || "1",
-                name: user?.name || "Company User",
-                role: "company",
-                profileImage: null,
-              },
-              {
-                _id: "3",
-                name: "Jane Smith",
-                role: "candidate",
-                profileImage: null,
-              },
-            ],
-            lastMessage: {
-              content: "Thank you for the opportunity.",
-              createdAt: new Date(Date.now() - 86400000).toISOString(),
-            },
-            updatedAt: new Date(Date.now() - 86400000).toISOString(),
-            unreadCount: { [user?._id || "1"]: 1 },
-          },
-        ];
 
-        setConversations(sampleConversations);
-        if (!activeConversation) {
-          setActiveConversation(sampleConversations[0]);
+        // Ensure candidates are sorted by name for easier selection
+        const sortedCandidates = validCandidates.sort((a, b) =>
+          a.name.localeCompare(b.name)
+        );
+
+        // Remove duplicates (in case a candidate applied to multiple jobs)
+        const uniqueCandidates = sortedCandidates.reduce((acc, curr) => {
+          if (!acc.find((c) => c._id === curr._id)) {
+            acc.push(curr);
+          }
+          return acc;
+        }, []);
+
+        setCandidates(uniqueCandidates);
+
+        // Select first conversation if available and none is currently active
+        if (conversationsResponse.data.length > 0 && !activeConversation) {
+          setActiveConversation(conversationsResponse.data[0]);
         }
-
-        // Sample candidates
-        setCandidates([
-          {
-            _id: "2",
-            name: "John Doe",
-            email: "john@example.com",
-            appliedJob: "Frontend Developer",
-          },
-          {
-            _id: "3",
-            name: "Jane Smith",
-            email: "jane@example.com",
-            appliedJob: "Backend Developer",
-          },
-          {
-            _id: "4",
-            name: "Alex Johnson",
-            email: "alex@example.com",
-            appliedJob: "UX Designer",
-          },
-        ]);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        if (error.response?.status === 404) {
+          toast.error(
+            "No candidates found. Check job postings and applications."
+          );
+        } else {
+          toast.error(
+            "Failed to load conversations and candidates. Please try again."
+          );
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    fetchConversations();
-  }, [user]);
+    fetchData();
+  }, []);
 
   // Fetch messages when active conversation changes
   useEffect(() => {
@@ -129,10 +85,12 @@ const CompanyMessages = () => {
         const response = await api.get(
           `/messages/conversations/${activeConversation._id}`
         );
-        setMessages(response.data.messages.reverse()); // Reverse to show oldest first        // Mark messages as read
+        setMessages(response.data);
+
+        // Mark conversation as read
         await api.put(`/messages/conversations/${activeConversation._id}/read`);
 
-        // Update unread counts in conversations list
+        // Update unread count in conversations list
         setConversations((prev) =>
           prev.map((conv) =>
             conv._id === activeConversation._id
@@ -145,95 +103,77 @@ const CompanyMessages = () => {
         );
       } catch (error) {
         console.error("Error fetching messages:", error);
-        // Set sample data for development
-        const otherParticipant = activeConversation.participants.find(
-          (p) => p._id !== user?._id
-        );
-
-        const sampleMessages = [
-          {
-            _id: "1",
-            content: `Hello! I'm interested in the position you posted.`,
-            sender: otherParticipant,
-            createdAt: new Date(Date.now() - 3600000).toISOString(),
-            read: true,
-          },
-          {
-            _id: "2",
-            content:
-              "Thank you for your interest. Your resume looks great, and we would like to schedule an interview.",
-            sender: {
-              _id: user?._id || "1",
-              name: user?.name || "Company User",
-              role: "company",
-              profileImage: null,
-            },
-            createdAt: new Date(Date.now() - 1800000).toISOString(),
-            read: true,
-          },
-          {
-            _id: "3",
-            content: "That sounds great! When would be a good time?",
-            sender: otherParticipant,
-            createdAt: new Date(Date.now() - 900000).toISOString(),
-            read: activeConversation._id === "1",
-          },
-        ];
-
-        setMessages(sampleMessages);
+        toast.error("Failed to load messages");
       }
     };
 
     fetchMessages();
-  }, [activeConversation, user]);
+  }, [activeConversation, user?._id]);
 
-  // Scroll to bottom when messages change
+  // Handle message synchronization
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    let messageSync;
 
-  // Format date to readable time
-  const formatMessageTime = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  };
+    const syncMessages = async () => {
+      if (!activeConversation) return;
 
-  // Format date for conversation list
-  const formatConversationDate = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
+      try {
+        const response = await api.get(
+          `/messages/conversations/${activeConversation._id}`
+        );
 
-    if (date.toDateString() === now.toDateString()) {
-      return date.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } else {
-      return date.toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-      });
-    }
-  };
+        // Compare with current messages to avoid unnecessary updates
+        const hasNewMessages = response.data.some(
+          (newMsg) =>
+            !messages.find((currentMsg) => currentMsg._id === newMsg._id)
+        );
 
-  // Get other participant in conversation
-  const getOtherParticipant = (conversation) => {
-    if (!conversation || !conversation.participants) return null;
-    return (
-      conversation.participants.find((p) => p._id !== user?._id) ||
-      conversation.participants[0]
-    );
-  };
+        if (hasNewMessages) {
+          setMessages(response.data);
+        }
 
-  // Handle sending a message
+        // Mark messages as read
+        await api.put(`/messages/conversations/${activeConversation._id}/read`);
+
+        // Update unread count in conversations list
+        setConversations((prev) =>
+          prev.map((conv) =>
+            conv._id === activeConversation._id
+              ? {
+                  ...conv,
+                  unreadCount: { ...conv.unreadCount, [user?._id]: 0 },
+                }
+              : conv
+          )
+        );
+      } catch (error) {
+        console.error("Error syncing messages:", error);
+      }
+    };
+
+    // Initial sync
+    syncMessages();
+
+    // Set up periodic sync every 10 seconds
+    messageSync = setInterval(syncMessages, 10000);
+
+    return () => {
+      if (messageSync) {
+        clearInterval(messageSync);
+      }
+    };
+  }, [activeConversation, user?._id]);
+
+  // Send message
   const handleSendMessage = async (e) => {
     e.preventDefault();
-
     if (!newMessage.trim() || !activeConversation) return;
 
     try {
       setSendingMessage(true);
-      const otherParticipant = getOtherParticipant(activeConversation);
+      const otherParticipant = activeConversation.participants.find(
+        (p) => p._id !== user?._id
+      );
 
       const messageData = {
         content: newMessage,
@@ -259,10 +199,9 @@ const CompanyMessages = () => {
       setMessages([...messages, optimisticMessage]);
       setNewMessage("");
 
-      // Send message to API
       const response = await api.post("/messages", messageData);
 
-      // Replace optimistic message with real one
+      // Update messages with real message
       setMessages((prev) =>
         prev.map((msg) =>
           msg._id === optimisticMessage._id ? response.data : msg
@@ -288,19 +227,14 @@ const CompanyMessages = () => {
       );
     } catch (error) {
       console.error("Error sending message:", error);
+      toast.error("Failed to send message");
 
-      if (process.env.NODE_ENV === "development") {
-        // Update optimistic message to show error
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.sending ? { ...msg, sending: false, error: true } : msg
-          )
-        );
-      } else {
-        // Remove optimistic message
-        setMessages((prev) => prev.filter((msg) => !msg.sending));
-        alert("Failed to send message. Please try again.");
-      }
+      // Update optimistic message to show error
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.sending ? { ...msg, sending: false, error: true } : msg
+        )
+      );
     } finally {
       setSendingMessage(false);
     }
@@ -315,53 +249,45 @@ const CompanyMessages = () => {
         receiverId: selectedCandidate._id,
       });
 
-      // Add to conversations list if not already there
-      if (!conversations.some((c) => c._id === response.data._id)) {
-        setConversations([response.data, ...conversations]);
-      }
-
-      // Select the new conversation
-      setActiveConversation(response.data);
+      const newConversation = response.data;
+      setConversations([newConversation, ...conversations]);
+      setActiveConversation(newConversation);
       setShowNewMessageModal(false);
       setSelectedCandidate(null);
+
+      toast.success("Conversation started successfully");
     } catch (error) {
-      console.error("Error creating conversation:", error);
-      alert("Failed to start conversation. Please try again.");
-
-      if (process.env.NODE_ENV === "development") {
-        // Create a mock conversation for development
-        const newConversation = {
-          _id: Date.now().toString(),
-          participants: [
-            {
-              _id: user?._id || "1",
-              name: user?.name || "Company User",
-              role: "company",
-              profileImage: null,
-            },
-            {
-              _id: selectedCandidate._id,
-              name: selectedCandidate.name,
-              role: "candidate",
-              profileImage: null,
-            },
-          ],
-          lastMessage: null,
-          updatedAt: new Date().toISOString(),
-          unreadCount: {},
-        };
-
-        setConversations([newConversation, ...conversations]);
-        setActiveConversation(newConversation);
-        setShowNewMessageModal(false);
-        setSelectedCandidate(null);
-      }
+      console.error("Error starting conversation:", error);
+      toast.error("Failed to start conversation");
     }
   };
 
-  // Handle conversation selection
-  const handleSelectConversation = (conversation) => {
-    setActiveConversation(conversation);
+  // Get the other participant in a conversation
+  const getOtherParticipant = (conversation) => {
+    if (!conversation?.participants) return null;
+    return (
+      conversation.participants.find((p) => p._id !== user?._id) ||
+      conversation.participants[0]
+    );
+  };
+
+  // Format date utilities
+  const formatMessageTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const formatConversationDate = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+
+    if (date.toDateString() === now.toDateString()) {
+      return formatMessageTime(dateString);
+    }
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
   };
 
   if (loading) {
@@ -437,7 +363,7 @@ const CompanyMessages = () => {
                           ? "bg-gray-800"
                           : ""
                       }`}
-                      onClick={() => handleSelectConversation(conversation)}
+                      onClick={() => setActiveConversation(conversation)}
                     >
                       <div className="flex items-start gap-3">
                         <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary-800 flex items-center justify-center">
@@ -478,7 +404,7 @@ const CompanyMessages = () => {
                         </div>
 
                         {unreadCount > 0 && (
-                          <div className="flex-shrink-0 ml-2">
+                          <div className="flex-shrink-0">
                             <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary-600 text-xs font-medium text-white">
                               {unreadCount}
                             </span>
@@ -638,15 +564,8 @@ const CompanyMessages = () => {
                     className="text-4xl text-gray-600 mb-3"
                   />
                   <p className="text-gray-400">
-                    Select a conversation or start a new one
+                    Select a conversation to start messaging
                   </p>
-                  <button
-                    className="btn-primary mt-4"
-                    onClick={() => setShowNewMessageModal(true)}
-                  >
-                    <FontAwesomeIcon icon="plus" className="mr-2" />
-                    New Conversation
-                  </button>
                 </div>
               </div>
             )}

@@ -97,9 +97,7 @@ const ApplicationDetail = () => {
       }));
 
       // Clear input
-      setMessage("");
-
-      // Make API call using service
+      setMessage(""); // Make API call using service
       const updatedMessages = await sendApplicationMessage(id, message);
 
       // Update with actual message data
@@ -108,14 +106,37 @@ const ApplicationDetail = () => {
           ...prev,
           messages: updatedMessages,
         }));
+      } else if (
+        updatedMessages &&
+        updatedMessages.messages &&
+        Array.isArray(updatedMessages.messages)
+      ) {
+        // Handle case where full application object is returned
+        setApplication((prev) => ({
+          ...prev,
+          messages: updatedMessages.messages,
+        }));
       } else {
         console.warn(
           "Received unexpected message format from API:",
           updatedMessages
         );
         // Attempt to fetch fresh application data
-        const updatedApplication = await getApplicationById(id);
-        setApplication(updatedApplication);
+        try {
+          const response = await api.get(`/applications/${id}/messages`);
+          if (response.data && Array.isArray(response.data)) {
+            setApplication((prev) => ({
+              ...prev,
+              messages: response.data,
+            }));
+          } else {
+            // If message-only endpoint fails, try full application
+            const updatedApplication = await getApplicationById(id);
+            setApplication(updatedApplication);
+          }
+        } catch (fetchError) {
+          console.error("Error fetching updated messages:", fetchError);
+        }
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -175,7 +196,7 @@ const ApplicationDetail = () => {
           // Only poll for new messages, without triggering full application refresh
           const response = await api.get(`/applications/${id}/messages`);
 
-          // Only update if there are changes in message count
+          // Only update if there are changes in message count or content
           setApplication((prev) => {
             if (
               !prev ||
@@ -183,8 +204,7 @@ const ApplicationDetail = () => {
               !response.data ||
               prev.messages.length !== response.data.length
             ) {
-              // If message count changed, fetch the full application details
-              // but only update messages to prevent triggering evaluations
+              // If message count changed, update messages
               if (prev && response.data) {
                 return {
                   ...prev,
@@ -196,7 +216,14 @@ const ApplicationDetail = () => {
           });
         }
       } catch (error) {
-        console.error("Error polling for updates:", error);
+        // Only log critical errors, not 403/401 which might happen during transitions
+        if (
+          error.response &&
+          error.response.status !== 403 &&
+          error.response.status !== 401
+        ) {
+          console.error("Error polling for updates:", error);
+        }
       } finally {
         isPolling = false;
       }
@@ -288,16 +315,40 @@ const ApplicationDetail = () => {
     try {
       setSending(true);
       toast.info("Starting automated interview...");
-      
+
+      // First check if there's a simpler way - using the /interview command
+      const messageResponse = await api.post(`/applications/${id}/messages`, {
+        content: "/interview",
+      });
+
+      if (messageResponse.data) {
+        // Update the messages in our application state
+        if (Array.isArray(messageResponse.data)) {
+          setApplication((prev) => ({
+            ...prev,
+            messages: messageResponse.data,
+          }));
+        } else if (messageResponse.data.messages) {
+          setApplication((prev) => ({
+            ...prev,
+            messages: messageResponse.data.messages,
+          }));
+        }
+
+        toast.success("Automated interview started successfully");
+        return;
+      }
+
+      // If that fails, use the dedicated interview endpoint
       const response = await api.post(`/applications/${id}/interview`);
-      
+
       if (response.data && response.data.messages) {
         // Update the messages in our application state
-        setApplication(prev => ({
+        setApplication((prev) => ({
           ...prev,
-          messages: response.data.messages
+          messages: response.data.messages,
         }));
-        
+
         toast.success("Automated interview started successfully");
       }
     } catch (error) {
@@ -349,7 +400,6 @@ const ApplicationDetail = () => {
                 </p>
                 <p className="text-gray-600">{application.job.location}</p>
               </div>
-
               <div className="mb-6">
                 <div className="text-sm text-gray-500 mb-1">Status</div>
                 <span
@@ -361,7 +411,6 @@ const ApplicationDetail = () => {
                     application.status.slice(1)}
                 </span>
               </div>
-
               {/* Status change actions for company */}
               <div className="mb-6">
                 <div className="text-sm text-gray-500 mb-2">Change Status</div>
@@ -411,7 +460,8 @@ const ApplicationDetail = () => {
                     Hire
                   </button>
                 </div>
-              </div>              <div className="mb-6">
+              </div>{" "}
+              <div className="mb-6">
                 <div className="text-sm text-gray-500 mb-1">Match Score</div>
                 <div className="flex items-center">
                   <div className="w-full bg-gray-200 rounded-full h-2.5 mr-2">
@@ -428,24 +478,29 @@ const ApplicationDetail = () => {
                   <div className="mt-2 text-xs text-gray-600">
                     <div className="flex justify-between">
                       <span>Resume Match:</span>
-                      <span>{application.matchingScores?.overallScore || Math.round(application.matchScore * 0.7)}%</span>
+                      <span>
+                        {application.matchingScores?.overallScore ||
+                          Math.round(application.matchScore * 0.7)}
+                        %
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span>Interview Score:</span>
-                      <span>{application.interviewEvaluation.avgScore || 0}%</span>
+                      <span>
+                        {application.interviewEvaluation.avgScore || 0}%
+                      </span>
                     </div>
                     <div className="text-xs text-gray-500 mt-1 italic">
-                      * Match score combines resume match (70%) and interview performance (30%)
+                      * Match score combines resume match (70%) and interview
+                      performance (30%)
                     </div>
                   </div>
                 )}
               </div>
-
               <div className="mb-6">
                 <div className="text-sm text-gray-500 mb-1">Applied on</div>
                 <div>{formatDate(application.createdAt)}</div>
               </div>
-
               {application.llmRationale && (
                 <div className="mb-6">
                   <div className="text-sm text-gray-500 mb-1">AI Analysis</div>
@@ -454,7 +509,6 @@ const ApplicationDetail = () => {
                   </div>
                 </div>
               )}
-
               {/* Candidate Information */}
               <div className="mb-6">
                 <div className="text-sm text-gray-500 mb-1">Candidate</div>
@@ -472,7 +526,6 @@ const ApplicationDetail = () => {
                   </div>
                 </div>
               </div>
-
               {application.coverLetter && (
                 <div className="mb-6">
                   <div className="text-sm text-gray-500 mb-1">Cover Letter</div>
@@ -481,7 +534,6 @@ const ApplicationDetail = () => {
                   </div>
                 </div>
               )}
-
               {/* Screening Responses Section */}
               {application.screeningResponses &&
                 application.screeningResponses.length > 0 && (
@@ -889,53 +941,93 @@ const ApplicationDetail = () => {
               className="flex-grow overflow-y-auto p-6"
               style={{ maxHeight: "600px" }}
             >
+              {" "}
               <div className="space-y-4">
                 {application.messages && application.messages.length > 0 ? (
-                  application.messages.map((msg, index) => (
-                    <div
-                      key={index}
-                      className={`flex ${
-                        msg.sender === "company"
-                          ? "justify-end"
-                          : "justify-start"
-                      }`}
-                    >
-                      {msg.sender !== "company" && (
-                        <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center mr-2">
-                          <FontAwesomeIcon
-                            icon={getSenderIcon(msg.sender)}
-                            className="text-gray-500"
-                          />
-                        </div>
-                      )}
-
-                      <div>
-                        <div
-                          className={`max-w-md p-3 rounded-lg ${
-                            msg.sender === "company"
-                              ? "bg-primary text-white ml-auto"
-                              : msg.sender === "system"
-                              ? "bg-gray-100 text-gray-800"
-                              : "bg-gray-200 text-gray-800"
-                          }`}
-                        >
-                          {msg.content}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {msg.createdAt && formatDate(msg.createdAt)}
+                  <>
+                    {/* Check if interview is in progress */}
+                    {application.messages.some(
+                      (msg) =>
+                        msg.sender === "system" &&
+                        (msg.content.includes("interview") ||
+                          msg.content.includes("Interview"))
+                    ) && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center">
+                        <FontAwesomeIcon
+                          icon={faRobot}
+                          className="text-blue-500 mr-2"
+                        />
+                        <div className="text-sm text-blue-700">
+                          <strong>AI Interview in progress</strong>
+                          <p className="text-xs">
+                            The system is automatically evaluating candidate
+                            responses.
+                          </p>
                         </div>
                       </div>
-
-                      {msg.sender === "company" && (
-                        <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center ml-2">
-                          <FontAwesomeIcon
-                            icon={getSenderIcon(msg.sender)}
-                            className="text-white"
-                          />
+                    )}
+                    {/* Messages list */}
+                    {application.messages.map((msg, index) => (
+                      <div
+                        key={index}
+                        className={`flex ${
+                          msg.sender === "company"
+                            ? "justify-end"
+                            : "justify-start"
+                        }`}
+                      >
+                        {msg.sender !== "company" && (
+                          <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center mr-2">
+                            <FontAwesomeIcon
+                              icon={getSenderIcon(msg.sender)}
+                              className="text-gray-500"
+                            />
+                          </div>
+                        )}{" "}
+                        <div>
+                          <div
+                            className={`max-w-md p-3 rounded-lg ${
+                              msg.sender === "company"
+                                ? "bg-primary text-white ml-auto"
+                                : msg.sender === "system"
+                                ? "bg-blue-100 text-gray-800 border border-blue-200"
+                                : "bg-gray-200 text-gray-800"
+                            }`}
+                          >
+                            {msg.sender === "system" ? (
+                              <div>
+                                <div className="font-medium text-blue-600 mb-1">
+                                  <span className="flex items-center">
+                                    <FontAwesomeIcon
+                                      icon={faRobot}
+                                      className="mr-1"
+                                    />
+                                    AI Interviewer
+                                  </span>
+                                </div>
+                                <div className="whitespace-pre-line text-gray-800">
+                                  {msg.content}
+                                </div>
+                              </div>
+                            ) : (
+                              msg.content
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {msg.createdAt && formatDate(msg.createdAt)}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  ))
+                        {msg.sender === "company" && (
+                          <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center ml-2">
+                            <FontAwesomeIcon
+                              icon={getSenderIcon(msg.sender)}
+                              className="text-white"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </>
                 ) : (
                   <div className="text-center text-gray-500 py-8">
                     No messages yet. Start the conversation with this candidate!
@@ -943,7 +1035,9 @@ const ApplicationDetail = () => {
                 )}
                 <div ref={chatEndRef} />
               </div>
-            </div>            <div className="p-4 border-t">
+            </div>
+
+            <div className="p-4 border-t">
               <div className="flex flex-col space-y-2">
                 <div className="flex items-center">
                   <input
@@ -968,20 +1062,49 @@ const ApplicationDetail = () => {
                     ) : (
                       <FontAwesomeIcon icon={faPaperPlane} />
                     )}
+                  </button>{" "}
+                </div>{" "}
+                <div className="flex flex-col ml-2">
+                  <button
+                    onClick={handleStartInterview}
+                    disabled={
+                      sending ||
+                      application.messages.some(
+                        (msg) => msg.sender === "system"
+                      )
+                    }
+                    className={`p-2 rounded-lg text-sm ${
+                      sending
+                        ? "bg-gray-100 text-gray-500 cursor-not-allowed"
+                        : application.messages.some(
+                            (msg) => msg.sender === "system"
+                          )
+                        ? "bg-green-100 text-green-700 cursor-not-allowed"
+                        : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                    } border ${
+                      application.messages.some(
+                        (msg) => msg.sender === "system"
+                      )
+                        ? "border-green-300"
+                        : "border-blue-300"
+                    } transition-colors flex items-center justify-center mb-1`}
+                    title={
+                      application.messages.some(
+                        (msg) => msg.sender === "system"
+                      )
+                        ? "AI interview is already in progress"
+                        : "Start an automated AI interview with the candidate"
+                    }
+                  >
+                    <FontAwesomeIcon icon={faRobot} className="mr-2" />
+                    {application.messages.some((msg) => msg.sender === "system")
+                      ? "AI Interview Active"
+                      : "Start AI Interview"}
                   </button>
+                  <div className="text-xs text-gray-500 px-1">
+                    Automated interview questions will be sent to the candidate
+                  </div>
                 </div>
-                <button
-                  onClick={handleStartInterview}
-                  disabled={sending}
-                  className={`p-2 rounded-lg text-sm ${
-                    sending
-                      ? "bg-gray-100 text-gray-500 cursor-not-allowed"
-                      : "bg-blue-50 text-blue-700 hover:bg-blue-100"
-                  } border border-blue-200 transition-colors flex items-center justify-center`}
-                >
-                  <FontAwesomeIcon icon={faRobot} className="mr-2" />
-                  Start Automated Interview
-                </button>
               </div>
             </div>
           </div>

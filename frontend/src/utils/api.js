@@ -22,6 +22,15 @@ api.interceptors.response.use(
       return api(originalRequest);
     }
 
+    // Add more context to 403 errors related to applications
+    if (error.response && error.response.status === 403) {
+      if (originalRequest.url.includes("/applications/")) {
+        if (error.response.data && error.response.data.message) {
+          error.response.data.message = `Access denied: ${error.response.data.message}. If this is unexpected, please refresh the page and try again.`;
+        }
+      }
+    }
+
     return Promise.reject(error);
   }
 );

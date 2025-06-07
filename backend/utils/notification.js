@@ -1,4 +1,5 @@
 // Notification utility for database notifications
+import mongoose from "mongoose";
 import User from "../models/User.js";
 
 /**
@@ -12,6 +13,7 @@ export const storeNotification = async (userId, notification) => {
       $push: {
         notifications: {
           ...notification,
+          _id: new mongoose.Types.ObjectId(), // Add ObjectId for notification
           timestamp: new Date(),
           isRead: false,
         },
@@ -50,15 +52,19 @@ export const createNotification = async (
       user.notifications = [];
     }
 
-    // Add notification
-    user.notifications.push({
+    // Create a new notification with MongoDB ObjectId
+    const notification = {
+      _id: new mongoose.Types.ObjectId(), // Generate new ObjectId for notification
       type,
       title,
       message,
       data,
       isRead: false,
       createdAt: new Date(),
-    });
+    };
+
+    // Add notification
+    user.notifications.push(notification);
 
     // Limit to most recent 50 notifications
     if (user.notifications.length > 50) {
@@ -66,7 +72,7 @@ export const createNotification = async (
     }
 
     await user.save();
-    return user.notifications[user.notifications.length - 1];
+    return notification;
   } catch (error) {
     console.error("Error creating notification:", error);
     return null;
@@ -91,7 +97,7 @@ export const notifyUser = async (
   data = {}
 ) => {
   try {
-    // Create database notification
+    // Create database notification first
     const notification = await createNotification(
       userId,
       type,
@@ -100,15 +106,15 @@ export const notifyUser = async (
       data
     );
 
-    // If we have a socket.io instance, emit an event to the user
+    // If we have a socket.io instance and notification was created successfully, emit an event
     if (io && notification) {
       try {
         io.to(userId).emit("notification", {
+          ...notification, // This includes the _id and other fields
           type,
           title,
           message,
           data,
-          id: notification._id,
         });
       } catch (socketError) {
         console.log(
