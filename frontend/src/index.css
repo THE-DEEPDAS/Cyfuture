@@ -62,6 +62,20 @@ button {
   @apply bg-background-card rounded-lg shadow-custom-dark p-6 transition-all;
 }
 
+/* Fix for dynamically loaded content */
+.dynamically-loaded {
+  @apply bg-background-primary text-white;
+}
+
+/* Ensure all dynamically generated UI elements have proper background */
+.modal-content,
+.dropdown-content,
+.popover-content,
+.tooltip,
+[data-loaded="dynamic"] {
+  @apply bg-background-secondary text-white;
+}
+
 /* Animation classes */
 .fade-in {
   animation: fadeIn 0.3s ease-in-out;

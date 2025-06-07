@@ -98,12 +98,46 @@ const generateFallbackAnalysis = (job, candidate) => {
  * @param {string} prompt - The prompt to send to the LLM
  * @returns {Promise<string>} - The text response from the LLM
  */
+// Cache to store recent requests and prevent duplicates
+const requestCache = new Map();
+const CACHE_TTL = 30000; // 30 seconds cache TTL
+
+// Prevent excessive API calls with timestamp-based throttling
+let lastRequestTime = 0;
+const THROTTLE_INTERVAL = 30000; // 30 seconds between calls
+
 export const getLLMResponse = async (prompt) => {
   try {
+    // Check if we have this prompt in cache
+    if (requestCache.has(prompt)) {
+      console.log("Using cached Gemini API response...");
+      return requestCache.get(prompt);
+    }
+
+    // Check if we should throttle
+    const now = Date.now();
+    if (now - lastRequestTime < THROTTLE_INTERVAL) {
+      console.log("Throttling Gemini API request, using fallback...");
+      return "I'm processing your request. Please wait a moment before asking again.";
+    }
+
+    // Update last request time
+    lastRequestTime = now;
+
     console.log("Making request to Gemini API...");
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    return response.text();
+    const responseText = response.text();
+
+    // Cache the response
+    requestCache.set(prompt, responseText);
+
+    // Set timeout to clear this cache entry
+    setTimeout(() => {
+      requestCache.delete(prompt);
+    }, CACHE_TTL);
+
+    return responseText;
   } catch (error) {
     console.error("LLM Response Error:", error);
     throw new Error(`Failed to get LLM response: ${error.message}`);

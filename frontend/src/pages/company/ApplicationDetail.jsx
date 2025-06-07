@@ -131,7 +131,6 @@ const ApplicationDetail = () => {
       setSending(false);
     }
   };
-
   // Handle status updates
   const handleStatusChange = async (newStatus) => {
     try {
@@ -140,37 +139,78 @@ const ApplicationDetail = () => {
       // Send status update request using service
       const response = await updateApplicationStatus(id, newStatus);
 
-      // Update local state
-      setApplication((prev) => ({
-        ...prev,
-        status: response.status,
-        messages: response.messages, // API returns updated messages including system message
-      }));
+      // Update local state with a short delay to ensure DOM updates properly
+      setTimeout(() => {
+        setApplication((prev) => ({
+          ...prev,
+          status: response.status,
+          messages: response.messages, // API returns updated messages including system message
+        }));
 
-      toast.success(`Application status updated to ${newStatus}`);
+        // Force a re-render by triggering a small state change
+        setSending(true);
+        setTimeout(() => setSending(false), 50);
+
+        toast.success(`Application status updated to ${newStatus}`);
+      }, 300);
     } catch (error) {
       console.error("Error updating status:", error);
       toast.error("Failed to update application status");
     }
-  };
-
-  // Handle real-time updates with polling
+  }; // Handle real-time updates with polling
   useEffect(() => {
-    // Polling interval for updates
-    const pollInterval = setInterval(async () => {
+    let pollInterval;
+    let isPolling = false;
+
+    // Create a throttled polling function
+    const pollForUpdates = async () => {
+      // If already polling, skip this cycle
+      if (isPolling) return;
+
       try {
+        isPolling = true;
+
         // Only poll if we have an application
         if (id) {
-          const response = await api.get(`/applications/${id}`);
-          setApplication(response.data);
+          // Only poll for new messages, without triggering full application refresh
+          const response = await api.get(`/applications/${id}/messages`);
+
+          // Only update if there are changes in message count
+          setApplication((prev) => {
+            if (
+              !prev ||
+              !prev.messages ||
+              !response.data ||
+              prev.messages.length !== response.data.length
+            ) {
+              // If message count changed, fetch the full application details
+              // but only update messages to prevent triggering evaluations
+              if (prev && response.data) {
+                return {
+                  ...prev,
+                  messages: response.data,
+                };
+              }
+            }
+            return prev;
+          });
         }
       } catch (error) {
         console.error("Error polling for updates:", error);
+      } finally {
+        isPolling = false;
       }
-    }, 10000); // Poll every 10 seconds
+    };
+
+    // Initial poll after component mount but with a delay to prevent immediate polling
+    const initialPollTimeout = setTimeout(pollForUpdates, 10000);
+
+    // Set up polling interval with a longer interval to reduce API calls
+    pollInterval = setInterval(pollForUpdates, 60000); // Poll every 60 seconds
 
     return () => {
       clearInterval(pollInterval);
+      clearTimeout(initialPollTimeout);
     };
   }, [id]);
 
@@ -227,7 +267,6 @@ const ApplicationDetail = () => {
   const toggleSection = (section) => {
     setExpandedSection(expandedSection === section ? null : section);
   };
-
   // Function to handle AI evaluation of screening responses
   const handleEvaluateResponses = async () => {
     try {
@@ -241,6 +280,31 @@ const ApplicationDetail = () => {
     } catch (error) {
       console.error("Error evaluating responses:", error);
       toast.error("Failed to evaluate screening responses");
+    }
+  };
+
+  // Function to start an automated interview
+  const handleStartInterview = async () => {
+    try {
+      setSending(true);
+      toast.info("Starting automated interview...");
+      
+      const response = await api.post(`/applications/${id}/interview`);
+      
+      if (response.data && response.data.messages) {
+        // Update the messages in our application state
+        setApplication(prev => ({
+          ...prev,
+          messages: response.data.messages
+        }));
+        
+        toast.success("Automated interview started successfully");
+      }
+    } catch (error) {
+      console.error("Error starting interview:", error);
+      toast.error("Failed to start automated interview");
+    } finally {
+      setSending(false);
     }
   };
 
@@ -347,9 +411,7 @@ const ApplicationDetail = () => {
                     Hire
                   </button>
                 </div>
-              </div>
-
-              <div className="mb-6">
+              </div>              <div className="mb-6">
                 <div className="text-sm text-gray-500 mb-1">Match Score</div>
                 <div className="flex items-center">
                   <div className="w-full bg-gray-200 rounded-full h-2.5 mr-2">
@@ -362,6 +424,21 @@ const ApplicationDetail = () => {
                     {application.matchScore}%
                   </span>
                 </div>
+                {application.interviewEvaluation && (
+                  <div className="mt-2 text-xs text-gray-600">
+                    <div className="flex justify-between">
+                      <span>Resume Match:</span>
+                      <span>{application.matchingScores?.overallScore || Math.round(application.matchScore * 0.7)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Interview Score:</span>
+                      <span>{application.interviewEvaluation.avgScore || 0}%</span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1 italic">
+                      * Match score combines resume match (70%) and interview performance (30%)
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="mb-6">
@@ -449,39 +526,173 @@ const ApplicationDetail = () => {
                             </div>
                           )}
                         </div>
-                      ))}
-                      <button
-                        onClick={() => {
-                          try {
-                            toast.info(
-                              "Analyzing candidate responses with AI..."
-                            );
-                            api
-                              .post(`/applications/${id}/evaluate-screening`)
-                              .then((response) => {
-                                setApplication(response.data);
-                                toast.success(
-                                  "Screening responses evaluated successfully"
-                                );
-                              })
-                              .catch((error) => {
-                                console.error(
-                                  "Error evaluating responses:",
-                                  error
-                                );
-                                toast.error(
-                                  "Failed to evaluate screening responses"
-                                );
-                              });
-                          } catch (error) {
-                            console.error("Error:", error);
-                            toast.error("An error occurred");
+                      ))}{" "}
+                      {/* Add state variables for countdown timer */}
+                      {(() => {
+                        const [countdown, setCountdown] = useState(0);
+                        const [isEvaluating, setIsEvaluating] = useState(false);
+
+                        // Effect to handle countdown timer
+                        useEffect(() => {
+                          // Check if on cooldown
+                          const cooldownKey = `ai_eval_cooldown_${id}`;
+                          const lastEvalTime =
+                            localStorage.getItem(cooldownKey);
+                          const cooldownPeriod = 30000; // 30 seconds cooldown
+
+                          if (lastEvalTime) {
+                            const now = Date.now();
+                            const elapsedTime = now - parseInt(lastEvalTime);
+
+                            if (elapsedTime < cooldownPeriod) {
+                              // Still on cooldown, start countdown
+                              const remainingTime = Math.ceil(
+                                (parseInt(lastEvalTime) +
+                                  cooldownPeriod -
+                                  now) /
+                                  1000
+                              );
+                              setCountdown(remainingTime);
+                              setIsEvaluating(true);
+
+                              // Set up countdown interval
+                              const countdownInterval = setInterval(() => {
+                                setCountdown((prevCount) => {
+                                  if (prevCount <= 1) {
+                                    clearInterval(countdownInterval);
+                                    setIsEvaluating(false);
+                                    return 0;
+                                  }
+                                  return prevCount - 1;
+                                });
+                              }, 1000);
+
+                              return () => clearInterval(countdownInterval);
+                            }
                           }
-                        }}
-                        className="mt-3 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium py-1 px-2 rounded border border-blue-200 transition-colors w-full"
-                      >
-                        Analyze Responses with AI
-                      </button>
+                        }, [id]);
+
+                        // Determine button state and text
+                        const buttonText = isEvaluating
+                          ? `Please wait ${countdown}s`
+                          : sending
+                          ? "Processing..."
+                          : "Analyze Responses with AI";
+
+                        const isDisabled = sending || isEvaluating;
+
+                        return (
+                          <button
+                            onClick={() => {
+                              // Check if evaluation already exists
+                              const allEvaluated =
+                                application.screeningResponses.every(
+                                  (response) =>
+                                    response.llmEvaluation &&
+                                    response.llmEvaluation.score
+                                );
+
+                              // Check localStorage for cooldown
+                              const cooldownKey = `ai_eval_cooldown_${id}`;
+                              const lastEvalTime =
+                                localStorage.getItem(cooldownKey);
+                              const now = Date.now();
+                              const cooldownPeriod = 30000; // 30 seconds cooldown
+
+                              if (
+                                lastEvalTime &&
+                                now - parseInt(lastEvalTime) < cooldownPeriod
+                              ) {
+                                const remainingTime = Math.ceil(
+                                  (parseInt(lastEvalTime) +
+                                    cooldownPeriod -
+                                    now) /
+                                    1000
+                                );
+                                toast.info(
+                                  `Please wait ${remainingTime} seconds before analyzing again.`
+                                );
+                                return;
+                              }
+
+                              if (allEvaluated && !lastEvalTime) {
+                                toast.info(
+                                  "Responses already analyzed. Please wait 30 seconds before analyzing again."
+                                );
+                                // Set cooldown in localStorage even if already evaluated
+                                localStorage.setItem(
+                                  cooldownKey,
+                                  now.toString()
+                                );
+                                setIsEvaluating(true);
+                                setCountdown(30);
+                                return;
+                              }
+
+                              try {
+                                // Set evaluating state to prevent multiple clicks
+                                setSending(true);
+                                setIsEvaluating(true);
+                                setCountdown(30);
+
+                                // Store evaluation timestamp in localStorage
+                                localStorage.setItem(
+                                  cooldownKey,
+                                  now.toString()
+                                );
+
+                                toast.info(
+                                  "Analyzing candidate responses with AI..."
+                                );
+                                api
+                                  .post(
+                                    `/applications/${id}/evaluate-screening`
+                                  )
+                                  .then((response) => {
+                                    setApplication(response.data);
+                                    toast.success(
+                                      "Screening responses evaluated successfully"
+                                    );
+                                  })
+                                  .catch((error) => {
+                                    console.error(
+                                      "Error evaluating responses:",
+                                      error
+                                    );
+                                    toast.error(
+                                      "Failed to evaluate screening responses"
+                                    );
+                                  })
+                                  .finally(() => {
+                                    // Reset sending state
+                                    setSending(false);
+                                    // Countdown will continue from the useEffect
+                                  });
+                              } catch (error) {
+                                console.error("Error:", error);
+                                toast.error("An error occurred");
+                                setSending(false);
+                                setIsEvaluating(false);
+                              }
+                            }}
+                            disabled={isDisabled}
+                            className={`mt-3 text-xs ${
+                              isDisabled
+                                ? "bg-gray-100 text-gray-500 cursor-not-allowed"
+                                : "bg-blue-50 hover:bg-blue-100 text-blue-700"
+                            } font-medium py-1 px-2 rounded border border-blue-200 transition-colors w-full flex justify-center items-center`}
+                          >
+                            {isEvaluating && (
+                              <FontAwesomeIcon
+                                icon={faSpinner}
+                                spin
+                                className="mr-1"
+                              />
+                            )}
+                            {buttonText}
+                          </button>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
@@ -732,32 +943,44 @@ const ApplicationDetail = () => {
                 )}
                 <div ref={chatEndRef} />
               </div>
-            </div>
-
-            <div className="p-4 border-t">
-              <div className="flex items-center">
-                <input
-                  type="text"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Type a message to the candidate..."
-                  className="flex-grow p-3 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
-                />
+            </div>            <div className="p-4 border-t">
+              <div className="flex flex-col space-y-2">
+                <div className="flex items-center">
+                  <input
+                    type="text"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder="Type a message to the candidate..."
+                    className="flex-grow p-3 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+                  />
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={sending || !message.trim()}
+                    className={`p-3 rounded-r-lg ${
+                      sending || !message.trim()
+                        ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                        : "bg-primary text-white hover:bg-primary-dark"
+                    } transition-colors`}
+                  >
+                    {sending ? (
+                      <FontAwesomeIcon icon={faSpinner} spin />
+                    ) : (
+                      <FontAwesomeIcon icon={faPaperPlane} />
+                    )}
+                  </button>
+                </div>
                 <button
-                  onClick={handleSendMessage}
-                  disabled={sending || !message.trim()}
-                  className={`p-3 rounded-r-lg ${
-                    sending || !message.trim()
-                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                      : "bg-primary text-white hover:bg-primary-dark"
-                  } transition-colors`}
+                  onClick={handleStartInterview}
+                  disabled={sending}
+                  className={`p-2 rounded-lg text-sm ${
+                    sending
+                      ? "bg-gray-100 text-gray-500 cursor-not-allowed"
+                      : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                  } border border-blue-200 transition-colors flex items-center justify-center`}
                 >
-                  {sending ? (
-                    <FontAwesomeIcon icon={faSpinner} spin />
-                  ) : (
-                    <FontAwesomeIcon icon={faPaperPlane} />
-                  )}
+                  <FontAwesomeIcon icon={faRobot} className="mr-2" />
+                  Start Automated Interview
                 </button>
               </div>
             </div>

@@ -75,24 +75,52 @@ export const createNotification = async (
 
 /**
  * Send a notification to a user through database storage for polling
+ * @param {Object} io - Socket.io instance (optional)
  * @param {String} userId - ID of the recipient user
  * @param {String} type - Notification type
  * @param {String} title - Notification title
  * @param {String} message - Notification message
  * @param {Object} data - Additional notification data
  */
-export const notifyUser = async (userId, type, title, message, data = {}) => {
-  // Create database notification
-  const notification = await createNotification(
-    userId,
-    type,
-    title,
-    message,
-    data
-  );
+export const notifyUser = async (
+  io,
+  userId,
+  type,
+  title,
+  message,
+  data = {}
+) => {
+  try {
+    // Create database notification
+    const notification = await createNotification(
+      userId,
+      type,
+      title,
+      message,
+      data
+    );
 
-  // Store notification for polling
-  if (notification) {
-    await storeNotification(userId, notification);
+    // If we have a socket.io instance, emit an event to the user
+    if (io && notification) {
+      try {
+        io.to(userId).emit("notification", {
+          type,
+          title,
+          message,
+          data,
+          id: notification._id,
+        });
+      } catch (socketError) {
+        console.log(
+          "Socket notification failed, continuing with database notification only",
+          socketError
+        );
+      }
+    }
+
+    return notification;
+  } catch (error) {
+    console.error("Error in notifyUser:", error.message);
+    return null;
   }
 };

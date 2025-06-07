@@ -9,6 +9,10 @@ import { generateChatResponse } from "../utils/llm.js";
 // @desc    Evaluate screening responses with AI
 // @route   POST /api/applications/:id/evaluate-screening
 // @access  Private/Company
+// Cache to prevent repeated evaluations
+const evaluationCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
+
 export const evaluateScreeningResponses = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
@@ -41,6 +45,30 @@ export const evaluateScreeningResponses = asyncHandler(async (req, res) => {
   ) {
     res.status(400);
     throw new Error("No screening responses to evaluate");
+  }
+
+  // Check if we already have evaluations and if they're recent
+  const cacheKey = `evaluation-${id}`;
+  if (evaluationCache.has(cacheKey)) {
+    console.log("Using cached evaluation results");
+    return res.json(evaluationCache.get(cacheKey));
+  }
+
+  // Check if responses are already evaluated
+  const allEvaluated = application.screeningResponses.every(
+    (response) => response.llmEvaluation && response.llmEvaluation.score
+  );
+
+  if (allEvaluated) {
+    console.log("All responses already evaluated, returning current data");
+    evaluationCache.set(cacheKey, application);
+
+    // Set timeout to clear cache
+    setTimeout(() => {
+      evaluationCache.delete(cacheKey);
+    }, CACHE_TTL);
+
+    return res.json(application);
   }
 
   try {

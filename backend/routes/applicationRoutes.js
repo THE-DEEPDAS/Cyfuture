@@ -9,6 +9,7 @@ import {
   getCandidateApplications,
   getCompanyApplications,
   getApplicationById,
+  getApplicationMessages,
   getJobApplicationStats,
   updateApplicationStatus,
   sendMessage,
@@ -21,6 +22,7 @@ import {
   acceptApplication,
   rejectApplication,
   hireCandidate,
+  startAutomatedInterview,
 } from "../controllers/applicationController.js";
 
 const router = express.Router();
@@ -39,6 +41,9 @@ router.get("/stats/:jobId", protect, companyOnly, getJobApplicationStats);
 
 // @route   GET /api/applications/:id
 router.get("/:id", protect, getApplicationById);
+
+// @route   GET /api/applications/:id/messages
+router.get("/:id/messages", protect, getApplicationMessages);
 
 // @route   PUT /api/applications/:id/status
 router.put("/:id/status", protect, companyOnly, updateApplicationStatus);
@@ -60,6 +65,9 @@ router.delete("/:id/shortlist", protect, companyOnly, removeFromShortlist);
 
 // @route   POST /api/applications/:id/messages
 router.post("/:id/messages", protect, sendMessage);
+
+// @route   POST /api/applications/:id/interview
+router.post("/:id/interview", protect, companyOnly, startAutomatedInterview);
 
 // @route   GET /api/applications/job/:jobId
 router.get("/job/:jobId", protect, companyOnly, getJobApplications);

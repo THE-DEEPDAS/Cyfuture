@@ -53,8 +53,7 @@ const applicationSchema = new mongoose.Schema(
       max: 100,
       default: 0,
       index: true,
-    },
-    rejectionReason: {
+    },    rejectionReason: {
       type: String,
       required: false,
     },
@@ -62,6 +61,19 @@ const applicationSchema = new mongoose.Schema(
       skills: Number,
       experience: Number,
       total: Number,
+    },
+    interviewEvaluation: {
+      avgScore: Number,
+      evaluations: [
+        {
+          question: String,
+          response: String,
+          evaluation: String,
+          score: Number,
+          timestamp: Date
+        }
+      ],
+      updatedAt: Date
     },
     llmAnalysis: {
       explanation: String,

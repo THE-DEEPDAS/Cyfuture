@@ -13,6 +13,7 @@ import "react-toastify/dist/ReactToastify.css";
 
 import App from "./App.jsx";
 import "./index.css";
+import "./styles/fixWhiteContent.css"; // Import our CSS fix
 import { AuthProvider } from "./context/AuthContext.jsx";
 import api from "./utils/api.js";
 

@@ -658,18 +658,27 @@ export const updateApplicationStatus = asyncHandler(async (req, res) => {
     notificationMessage = `Excellent news! Your application for ${application.job.title} has been successful. The employer will contact you with further details.`;
   }
 
-  await notifyUser(
-    io,
-    application.candidate.toString(),
-    notificationType,
-    notificationTitle,
-    notificationMessage,
-    {
-      applicationId: application._id.toString(),
-      jobId: application.job._id.toString(),
-      status,
-    }
-  );
+  // Get the io object from the request
+  const io = req.app.get("io");
+
+  // Send notification to candidate
+  try {
+    await notifyUser(
+      io,
+      application.candidate.toString(),
+      notificationType,
+      notificationTitle,
+      notificationMessage,
+      {
+        applicationId: application._id.toString(),
+        jobId: application.job._id.toString(),
+        status,
+      }
+    );
+  } catch (notificationError) {
+    console.error("Error sending notification:", notificationError);
+    // Continue even if notification fails
+  }
 
   res.json(updatedApplication);
 });
@@ -681,107 +690,123 @@ export const sendMessage = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { content, language = "en" } = req.body;
 
-  const application = await Application.findById(id);
+  const application = await Application.findById(id)
+    .populate({
+      path: "job",
+      select: "company title description requiredSkills experience",
+      populate: {
+        path: "company",
+        select: "companyName"
+      }
+    })
+    .populate({
+      path: "candidate",
+      select: "name email skills"
+    })
+    .populate("resume", "parsedData");
 
   if (!application) {
     res.status(404);
     throw new Error("Application not found");
   }
-
+  
   // Check if user has permission to send messages
   const isCompany = req.user.role === "company";
   const isCandidate = req.user.role === "candidate";
 
   if (
     (isCandidate &&
-      application.candidate.toString() !== req.user._id.toString()) ||
-    (isCompany && application.job.toString() !== req.user._id.toString())
+      application.candidate._id.toString() !== req.user._id.toString()) ||
+    (isCompany &&
+      application.job.company._id.toString() !== req.user._id.toString())
   ) {
     res.status(403);
     throw new Error("Not authorized to send messages to this application");
   }
 
   // Get previous messages for context
-  const previousMessages = application.messages
-    .slice(-5)
-    .map((m) => `${m.sender}: ${m.content}`)
-    .join("\n");
+  const previousMessages = application.messages.slice(-5);
 
   // Add new message
-  application.messages.push({
+  const newMessage = {
     sender: req.user.role,
     content,
     language,
-  });
+    createdAt: new Date()
+  };
+  
+  application.messages.push(newMessage);
 
   // Get recipient ID (if sender is company, recipient is candidate, and vice versa)
   const recipientId =
     req.user.role === "company"
-      ? application.candidate.toString()
+      ? application.candidate._id.toString()
       : application.job.company.toString();
-
+  
   // Create notification for the recipient
   const io = req.app.get("io");
-  await notifyUser(
-    io,
-    recipientId,
-    "message",
-    "New Message",
-    `You have a new message regarding the application for ${
-      application.job?.title || "a job position"
-    }`,
-    {
-      applicationId: application._id.toString(),
-      jobId: application.job.toString(),
-    }
-  ); // If sender is candidate, generate AI response for interview questions
+
+  try {
+    await notifyUser(
+      io,
+      recipientId,
+      "message",
+      "New Message",
+      `You have a new message regarding the application for ${
+        application.job?.title || "a job position"
+      }`,
+      {
+        applicationId: application._id.toString(),
+        jobId: application.job._id.toString(),
+      }
+    );
+  } catch (notificationError) {
+    console.error("Error sending notification:", notificationError);
+    // Continue even if notification fails
+  }
+
+  // Import the interview service dynamically to avoid circular dependencies
+  const { 
+    generateInitialInterview, 
+    evaluateCandidateResponse, 
+    updateMatchScoreFromInterview 
+  } = await import("../services/interviewService.js");
+
+  // Handle automated AI responses based on who sent the message
   if (req.user.role === "candidate") {
     try {
+      // Track evaluations for updating match score
+      const evaluations = application.interviewEvaluation?.evaluations || [];
+      
       // Check if it's a new application with minimal messages (first interaction)
       const isNewApplication = application.messages.length <= 2;
       let aiResponse;
-
+      
       if (isNewApplication) {
-        // For new applications, generate comprehensive interview questions based on job details
-        // Fetch job details to use in prompt
-        const job = await Job.findById(application.job).populate("company");
-
-        // Create a detailed prompt using job information
-        const jobPrompt = `
-          This is a new job application for position: "${
-            job?.title || "unknown position"
-          }" at "${job?.company?.companyName || "unknown company"}".
-          
-          Job description: ${job?.description || "Not provided"}
-          Required skills: ${job?.requiredSkills?.join(", ") || "Not specified"}
-          Experience level: ${job?.experience || "Not specified"}
-          
-          You are an AI interviewer for this position. Please:
-          1. Introduce yourself as an AI interviewer for this specific position
-          2. Briefly explain the interview process
-          3. Ask 3-5 relevant and specific interview questions that evaluate the candidate's skills, experience, and fit for this role
-          
-          Format your response clearly, with one question per paragraph.
-        `;
-
-        aiResponse = await generateChatResponse(jobPrompt, content, language);
+        // For new applications, generate comprehensive interview questions
+        aiResponse = await generateInitialInterview(application.job);
       } else {
-        // For ongoing conversations, generate a more contextual response based on conversation history
-        // Create a context-aware prompt that understands this is part of an ongoing interview
-        const contextPrompt = `
-          This is an ongoing job interview conversation. 
-          Previous messages: ${previousMessages}
-          
-          You are an AI interviewer evaluating a candidate. Based on their response, 
-          provide constructive feedback and ask a relevant follow-up question that 
-          helps assess their qualifications for the position.
-        `;
-
-        aiResponse = await generateChatResponse(
-          contextPrompt,
+        // For ongoing conversations, evaluate response and generate follow-up
+        const result = await evaluateCandidateResponse(
+          application,
           content,
-          language
+          previousMessages
         );
+        
+        // Store evaluation for match score calculation
+        evaluations.push({
+          question: previousMessages[previousMessages.length - 1]?.content || "Previous question",
+          response: content,
+          evaluation: result.evaluation,
+          score: result.score,
+          timestamp: new Date()
+        });
+        
+        // Use the follow-up question as the AI response
+        aiResponse = result.followUpQuestion;
+        
+        // Update match score based on interview responses
+        await updateMatchScoreFromInterview(application, evaluations);
       }
 
       // Add system message with AI response
@@ -797,7 +822,7 @@ export const sendMessage = asyncHandler(async (req, res) => {
       const fallbackResponses = [
         "Thanks for your response. What specific skills do you have that are relevant to this position?",
         "That's interesting. Could you tell me about a time when you demonstrated problem-solving skills in a previous role?",
-        "Thank you for applying. Can you describe your experience with the technologies mentioned in the job description?",
+        "Thank you for sharing. Can you describe your experience with the technologies mentioned in the job description?",
         "I appreciate your interest in this position. What aspects of this role are you most excited about?",
         "Thanks for your application. How would your previous colleagues describe your work style and collaboration skills?",
       ];
@@ -809,6 +834,30 @@ export const sendMessage = asyncHandler(async (req, res) => {
       application.messages.push({
         sender: "system",
         content: randomResponse,
+        language,
+        createdAt: new Date(),
+      });
+    }
+  } else if (req.user.role === "company" && content.startsWith("/interview")) {
+    // Special command for company to trigger automated interview
+    try {
+      const aiResponse = await generateInitialInterview(application.job);
+      
+      application.messages.push({
+        sender: "system",
+        content: aiResponse,
+        language,
+        createdAt: new Date(),
+      });
+      
+      // Remove the original command message
+      application.messages.pop(newMessage);
+      
+    } catch (error) {
+      console.error("Error starting automated interview:", error);
+      application.messages.push({
+        sender: "system",
+        content: "An automated interview has been started for this candidate. They will receive a series of questions to respond to.",
         language,
         createdAt: new Date(),
       });
@@ -1218,10 +1267,20 @@ export const hireCandidate = asyncHandler(async (req, res) => {
  * @access  Private/Company
  */
 export const rejectApplication = asyncHandler(async (req, res) => {
-  const application = await Application.findById(req.params.id).populate({
-    path: "job",
-    select: "company title",
-  });
+  const application = await Application.findById(req.params.id)
+    .populate({
+      path: "job",
+      select: "company title requiredSkills experience education description",
+      populate: {
+        path: "company",
+        select: "companyName"
+      }
+    })
+    .populate({
+      path: "candidate",
+      select: "name email skills"
+    })
+    .populate("resume", "parsedData");
 
   if (!application) {
     res.status(404);
@@ -1229,7 +1288,7 @@ export const rejectApplication = asyncHandler(async (req, res) => {
   }
 
   // Check if the user is the company that posted the job
-  if (application.job.company.toString() !== req.user._id.toString()) {
+  if (application.job.company._id.toString() !== req.user._id.toString()) {
     res.status(403);
     throw new Error("Not authorized to reject this application");
   }
@@ -1237,22 +1296,48 @@ export const rejectApplication = asyncHandler(async (req, res) => {
   // Update the status to rejected
   application.status = "rejected";
 
-  // Add a system message about the status change
+  // Import the service for generating rejection explanation
+  const { generateRejectionExplanation } = await import("../services/interviewService.js");
+
+  // Generate an AI explanation for the rejection
+  let rejectionReason = "";
+  try {
+    // Prepare candidate data from resume for the explanation
+    const candidateData = {
+      skills: application.resume.parsedData?.skills || [],
+      experience: application.resume.parsedData?.experience || [],
+      education: application.resume.parsedData?.education || []
+    };
+
+    rejectionReason = await generateRejectionExplanation(
+      application.job,
+      candidateData,
+      application.matchScore || 60
+    );
+
+    // Save the explanation to the application
+    application.rejectionReason = rejectionReason;
+  } catch (error) {
+    console.error("Error generating rejection explanation:", error);
+    rejectionReason = `We appreciate your interest in the ${application.job.title} position. After careful review, we've decided to move forward with candidates whose skills and experience more closely align with our current needs. We encourage you to apply for future positions that match your qualifications.`;
+  }
+
+  // Add a system message about the status change with explanation
   application.messages.push({
     sender: "system",
-    content: "Application has been rejected",
+    content: `Your application has been rejected. ${rejectionReason}`,
     language: "en",
     createdAt: new Date(),
   });
 
   const updatedApplication = await application.save();
 
-  // Send notification to candidate
+  // Send notification to candidate with the explanation
   await notifyUser(
-    application.candidate.toString(),
+    application.candidate._id.toString(),
     "APPLICATION_REJECTED",
     "Application Status Update",
-    `We regret to inform you that your application for ${application.job.title} has not been selected to move forward.`,
+    `We regret to inform you that your application for ${application.job.title} has not been selected to move forward. ${rejectionReason}`,
     {
       applicationId: application._id.toString(),
       jobId: application.job._id.toString(),
@@ -1261,4 +1346,124 @@ export const rejectApplication = asyncHandler(async (req, res) => {
   );
 
   res.json(updatedApplication);
+});
+
+// @desc    Get application messages only
+// @route   GET /api/applications/:id/messages
+// @access  Private
+export const getApplicationMessages = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  // Find the application but only select the messages field and related fields
+  const application = await Application.findById(id)
+    .select("messages candidate job")
+    .populate({
+      path: "job",
+      select: "company"
+    });
+
+  if (!application) {
+    res.status(404);
+    throw new Error("Application not found");
+  }
+
+  // Check if user has permission to view this application
+  const isCandidate = req.user.role === "candidate";
+  const isCompany = req.user.role === "company";
+  
+  if (
+    !(
+      (isCandidate && application.candidate.toString() === req.user._id.toString()) ||
+      (isCompany && application.job.company.toString() === req.user._id.toString())
+    )
+  ) {
+    res.status(403);
+    throw new Error("Not authorized to access this application");
+  }
+
+  // Return only the messages array
+  res.json(application.messages);
+});
+
+// @desc    Start an automated interview for a candidate
+// @route   POST /api/applications/:id/interview
+// @access  Private/Company
+export const startAutomatedInterview = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const application = await Application.findById(id)
+    .populate({
+      path: "job",
+      select: "company title description requiredSkills experience",
+      populate: {
+        path: "company",
+        select: "companyName"
+      }
+    })
+    .populate({
+      path: "candidate",
+      select: "name email"
+    });
+
+  if (!application) {
+    res.status(404);
+    throw new Error("Application not found");
+  }
+
+  // Check if the user is the company that posted the job
+  if (application.job.company._id.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Not authorized to start interviews for this application");
+  }
+
+  try {
+    // Import the interview service dynamically
+    const { generateInitialInterview } = await import("../services/interviewService.js");
+    
+    // Generate interview introduction and questions
+    const interviewContent = await generateInitialInterview(application.job);
+    
+    // Add a company message indicating interview start
+    application.messages.push({
+      sender: "company",
+      content: "I've started an automated interview to help us learn more about your qualifications.",
+      language: "en",
+      createdAt: new Date()
+    });
+    
+    // Add the AI interviewer message with questions
+    application.messages.push({
+      sender: "system",
+      content: interviewContent,
+      language: "en", 
+      createdAt: new Date()
+    });
+    
+    // Save the application with the new messages
+    await application.save();
+    
+    // Notify the candidate about the interview
+    const io = req.app.get("io");
+    await notifyUser(
+      io,
+      application.candidate._id.toString(),
+      "message",
+      "Automated Interview Started",
+      `${application.job.company.companyName} has started an automated interview for your application to ${application.job.title}.`,
+      {
+        applicationId: application._id.toString(),
+        jobId: application.job._id.toString(),
+      }
+    );
+    
+    res.status(200).json({
+      success: true,
+      message: "Automated interview started successfully",
+      messages: application.messages
+    });
+  } catch (error) {
+    console.error("Error starting automated interview:", error);
+    res.status(500);
+    throw new Error("Failed to start automated interview");
+  }
 });

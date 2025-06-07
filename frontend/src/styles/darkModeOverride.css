@@ -1,0 +1,63 @@
+/* Add this at the beginning of your CSS file */
+.application-status-change,
+.application-content,
+.message-content,
+.dynamic-content,
+.candidate-info,
+.status-display {
+  transition: all 0.3s ease-in-out;
+}
+
+/* Fix for white content issue */
+.bg-white {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Specialized fixes for specific elements */
+.bg-white .text-gray-600,
+.bg-white .text-gray-700,
+.bg-white .text-gray-800 {
+  color: #94a3b8 !important; /* text-secondary */
+}
+
+/* Fix for system messages */
+.bg-gray-100 {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Additional fixes for status colors to maintain their colors */
+.bg-yellow-100 { background-color: rgba(253, 230, 138, 0.2) !important; }
+.bg-blue-100 { background-color: rgba(191, 219, 254, 0.2) !important; }
+.bg-green-100 { background-color: rgba(167, 243, 208, 0.2) !important; }
+.bg-red-100 { background-color: rgba(254, 202, 202, 0.2) !important; }
+.bg-purple-100 { background-color: rgba(221, 214, 254, 0.2) !important; }
+
+/* Preserve status text colors */
+.text-yellow-800 { color: #92400e !important; }
+.text-blue-800 { color: #1e40af !important; }
+.text-green-800 { color: #166534 !important; }
+.text-red-800 { color: #991b1b !important; }
+.text-purple-800 { color: #5b21b6 !important; }
+
+/* Fix for screening responses */
+.bg-gray-50 {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Fix for status change buttons */
+button:not([disabled]) {
+  opacity: 1 !important;
+}
+
+/* Force reflow for DOM updates */
+.force-reflow {
+  animation: forceReflow 0.01s;
+}
+
+@keyframes forceReflow {
+  from { opacity: 0.99; }
+  to { opacity: 1; }
+}

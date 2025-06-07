@@ -1,0 +1,97 @@
+/* Custom fix for white content issue - comprehensive solution */
+/* Target all white backgrounds */
+.bg-white, 
+.application-content,
+.message-content,
+.dynamic-content,
+.candidate-info,
+.status-display,
+div[class*="bg-white"] {
+  background-color: #1e293b !important; /* Use the actual color instead of var to ensure it works */
+  color: #f8fafc !important;
+}
+
+/* Fix text colors in these elements */
+.bg-white *,
+.application-content *,
+.message-content *,
+.dynamic-content *,
+.candidate-info *,
+.status-display * {
+  color: #f8fafc;
+}
+
+/* Ensure proper background for modals and popups */
+.modal, 
+.popup,
+.dropdown-content {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+/* Fix for messages and system messages */
+.message-bubble, 
+.chat-message {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Force dark backgrounds for modal and status updates */
+[class*="status"],
+[class*="shortlist"],
+[class*="reviewing"],
+[class*="modal"],
+[class*="popup"] {
+  background-color: #1e293b !important;
+}
+
+/* Fix for specific Tailwind classes that might be causing white backgrounds */
+.bg-gray-50, .bg-gray-100 {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+}
+
+/* Fix text colors in commonly used Tailwind classes */
+.text-gray-600, .text-gray-700, .text-gray-800 {
+  color: #cbd5e1 !important;
+}
+
+/* Status-specific colors that need to remain visible */
+.bg-yellow-100.text-yellow-800 { 
+  background-color: rgba(254, 240, 138, 0.2) !important; 
+  color: #fbbf24 !important; 
+}
+.bg-blue-100.text-blue-800 { 
+  background-color: rgba(191, 219, 254, 0.2) !important; 
+  color: #60a5fa !important; 
+}
+.bg-green-100.text-green-800 { 
+  background-color: rgba(167, 243, 208, 0.2) !important; 
+  color: #4ade80 !important; 
+}
+.bg-red-100.text-red-800 { 
+  background-color: rgba(254, 202, 202, 0.2) !important;
+  color: #f87171 !important; 
+}
+.bg-purple-100.text-purple-800 { 
+  background-color: rgba(224, 231, 255, 0.2) !important; 
+  color: #a78bfa !important; 
+}
+
+/* Fix borders to be visible but subtle */
+.border, .border-gray-200, .border-gray-100 {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Add animation delay for content transitions and force repaints */
+.application-status-change {
+  transition: all 0.5s ease-in-out;
+  animation: forceRepaint 0.1s forwards;
+}
+
+/* Animation to force browser repaint */
+@keyframes forceRepaint {
+  0% { opacity: 0.99; }
+  100% { opacity: 1; }
+}
