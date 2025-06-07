@@ -97,7 +97,7 @@ const ApplicationDetail = () => {
       setSending(true);
       const newMessage = {
         content: message,
-        sender: user.role === "company" ? "company" : "candidate",
+        sender: user.role === "company" ? "company" : "candidate", // Valid sender types: "candidate", "company", "system"
         createdAt: new Date().toISOString(),
       };
 

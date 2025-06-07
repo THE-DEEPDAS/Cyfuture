@@ -1,37 +1,26 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { useNavigate, useParams } from "react-router-dom";
+import { toast } from "react-toastify";
 import { getJobDetails } from "../../actions/jobActions";
-import { submitJobApplication } from "../../actions/applicationActions";
 import { getCandidateResumes } from "../../actions/resumeActions";
+import { submitJobApplication } from "../../actions/applicationActions";
 import Loading from "../../components/common/Loading";
 import Message from "../../components/common/Message";
 import ChatbotAssistant from "../../components/common/ChatbotAssistant";
-import { toast } from "react-toastify";
 
 const ApplicationForm = () => {
   const { jobId } = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
   const dispatch = useDispatch();
+  const navigate = useNavigate();
 
-  // Form state with localStorage persistence
-  const [selectedResume, setSelectedResume] = useState(
-    () => localStorage.getItem(`application_${jobId}_resume`) || ""
-  );
-  const [coverLetter, setCoverLetter] = useState(
-    () => localStorage.getItem(`application_${jobId}_coverLetter`) || ""
-  );
-  const [chatbotResponses, setChatbotResponses] = useState(() => {
-    const saved = localStorage.getItem(`application_${jobId}_responses`);
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [step, setStep] = useState(() =>
-    parseInt(localStorage.getItem(`application_${jobId}_step`) || "1")
-  );
+  const [selectedResume, setSelectedResume] = useState("");
+  const [coverLetter, setCoverLetter] = useState("");
+  const [chatbotResponses, setChatbotResponses] = useState([]);
+  const [step, setStep] = useState(1);
   const [validationErrors, setValidationErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false);
 
   // Redux state
   const jobDetails = useSelector((state) => state.jobDetails);
@@ -55,100 +44,38 @@ const ApplicationForm = () => {
   useEffect(() => {
     dispatch(getJobDetails(jobId));
     dispatch(getCandidateResumes());
+  }, [dispatch, jobId]);
 
-    // Clean up localStorage on unmount
-    return () => {
-      if (submitSuccess) {
-        localStorage.removeItem(`application_${jobId}_resume`);
-        localStorage.removeItem(`application_${jobId}_coverLetter`);
-        localStorage.removeItem(`application_${jobId}_responses`);
-        localStorage.removeItem(`application_${jobId}_step`);
-      }
-    };
-  }, [dispatch, jobId, submitSuccess]);
-
-  // Persist form state
-  useEffect(() => {
-    localStorage.setItem(`application_${jobId}_resume`, selectedResume);
-    localStorage.setItem(`application_${jobId}_coverLetter`, coverLetter);
-    localStorage.setItem(
-      `application_${jobId}_responses`,
-      JSON.stringify(chatbotResponses)
-    );
-    localStorage.setItem(`application_${jobId}_step`, step.toString());
-  }, [jobId, selectedResume, coverLetter, chatbotResponses, step]);
-
-  // Handle successful submission
-  useEffect(() => {
-    if (submitSuccess) {
-      toast.success("Application submitted successfully!");
-      navigate(`/applications/${submitSuccess.applicationId}/success`);
-    }
-  }, [navigate, submitSuccess]);
-
-  // Validation
-  const validateStep = (currentStep) => {
+  // Form validation
+  const validateForm = () => {
     const errors = {};
 
-    switch (currentStep) {
-      case 1:
-        if (!selectedResume) {
-          errors.resume = "Please select a resume";
-        }
-        break;
-      case 2:
-        if (!coverLetter.trim()) {
-          errors.coverLetter = "Cover letter is required";
-        } else if (coverLetter.length < 150) {
-          errors.coverLetter = "Cover letter must be at least 150 characters";
-        }
-        break;
-      case 3:
-        if (!chatbotResponses.length) {
-          errors.responses = "Please complete all screening questions";
-        } else if (
-          job?.screeningQuestions?.some(
-            (q, i) =>
-              q.required &&
-              (!chatbotResponses[i] || !chatbotResponses[i].trim())
-          )
-        ) {
-          errors.responses = "Please answer all required questions";
-        }
-        break;
-      default:
-        break;
+    if (!selectedResume) {
+      errors.resume = "Please select a resume";
+    }
+
+    if (!coverLetter.trim()) {
+      errors.coverLetter = "Cover letter is required";
+    } else if (coverLetter.length < 150) {
+      errors.coverLetter = "Cover letter must be at least 150 characters";
     }
 
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  // Form navigation
-  const nextStep = () => {
-    if (validateStep(step)) {
-      setStep(step + 1);
-      setValidationErrors({});
-    }
-  };
-
-  const prevStep = () => {
-    setStep(step - 1);
-    setValidationErrors({});
-  };
-
   // Form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!validateStep(3)) {
+    if (!validateForm()) {
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      dispatch(
+      await dispatch(
         submitJobApplication({
           jobId,
           resumeId: selectedResume,
@@ -157,7 +84,24 @@ const ApplicationForm = () => {
         })
       );
     } catch (error) {
-      toast.error("Failed to submit application. Please try again.");
+      if (
+        error?.response?.data?.message
+          ?.toLowerCase()
+          .includes("already applied")
+      ) {
+        toast.error(
+          "You have already submitted an application for this position. You can view your application status in your dashboard.",
+          {
+            autoClose: 5000,
+          }
+        );
+        setTimeout(() => {
+          navigate("/candidate/applications");
+        }, 2000);
+      } else {
+        toast.error("Failed to submit application. Please try again.");
+      }
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -323,7 +267,7 @@ const ApplicationForm = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={nextStep}
+                  onClick={() => setStep(2)}
                   disabled={!selectedResume}
                   className="btn btn-primary"
                 >
@@ -379,14 +323,14 @@ const ApplicationForm = () => {
               <div className="flex justify-between pt-4">
                 <button
                   type="button"
-                  onClick={prevStep}
+                  onClick={() => setStep(1)}
                   className="btn btn-ghost"
                 >
                   Back
                 </button>
                 <button
                   type="button"
-                  onClick={nextStep}
+                  onClick={() => setStep(3)}
                   disabled={coverLetter.length < 150}
                   className="btn btn-primary"
                 >
@@ -414,7 +358,7 @@ const ApplicationForm = () => {
               <div className="flex justify-between pt-4">
                 <button
                   type="button"
-                  onClick={prevStep}
+                  onClick={() => setStep(2)}
                   className="btn btn-ghost"
                 >
                   Back

@@ -70,36 +70,65 @@ export const applyWithScreening = async (
   screeningResponses = []
 ) => {
   try {
-    // Validate inputs
-    if (!jobId) throw new Error("Job ID is required");
-    if (!resumeId) throw new Error("Resume ID is required");
+    // Validate required fields
+    if (!jobId) {
+      throw new Error("Job ID is required");
+    }
+    if (!resumeId) {
+      throw new Error("Resume ID is required");
+    }
 
-    // Format screening responses if needed
-    const formattedResponses = screeningResponses.map((response) => {
-      // If it's already in the right format, return as is
-      if (response.question && response.response !== undefined) {
-        return response;
-      }
+    // Validate screening responses format
+    let formattedResponses = screeningResponses;
 
-      // If it's a string, assume we need the question ID which should be at the same index
-      return {
-        question:
-          typeof response.question === "string" ? response.question : null,
-        response:
-          typeof response === "string" ? response : response.response || "",
-      };
-    });
+    // If responses are strings or not properly formatted, format them
+    if (screeningResponses.length > 0) {
+      formattedResponses = screeningResponses.map((response) => {
+        if (typeof response === "string") {
+          return {
+            response: response.trim(),
+          };
+        }
+
+        // If it's an object but missing required fields
+        if (!response || typeof response !== "object") {
+          return {
+            response: "",
+          };
+        }
+
+        // If it has the right structure, just ensure response is trimmed
+        return {
+          ...response,
+          response: (response.response || "").trim(),
+        };
+      });
+    }
 
     // Submit application
     const response = await api.post(`/applications/${jobId}`, {
       resumeId,
-      coverLetter,
+      coverLetter: (coverLetter || "").trim(),
       screeningResponses: formattedResponses,
     });
 
     return response.data;
   } catch (error) {
-    throw error;
+    // Format error message for better user feedback
+    if (error.response) {
+      // Server returned an error response
+      throw new Error(
+        error.response.data?.message || "Failed to submit application"
+      );
+    } else if (error.request) {
+      // Request was made but no response received
+      throw new Error(
+        "Network error. Please check your connection and try again."
+      );
+    } else {
+      // Something else went wrong
+      throw new Error(error.message || "An unexpected error occurred");
+    }
   }
 };
 

@@ -62,7 +62,7 @@ const DashboardLayout = ({ type }) => {
         { to: "/candidate", icon: "tachometer-alt", label: "Dashboard" },
         { to: "/candidate/jobs", icon: "briefcase", label: "Find Jobs" },
         { to: "/candidate/resume", icon: "file-alt", label: "My Resumes" },
-        { to: "/candidate/messages", icon: "envelope", label: "Messages" },
+        // { to: "/candidate/messages", icon: "envelope", label: "Messages" },
       ];
     } else if (type === "company" || type === "admin") {
       return [
@@ -73,9 +73,9 @@ const DashboardLayout = ({ type }) => {
         },
         { to: "/company/jobs", icon: "briefcase", label: "Job Management" },
         { to: "/company/candidates", icon: "users", label: "Candidates" },
-        { to: "/company/analytics", icon: "chart-line", label: "Analytics" },
-        { to: "/company/messages", icon: "envelope", label: "Messages" },
-        { to: "/company/profile", icon: "building", label: "Company Profile" },
+        // { to: "/company/analytics", icon: "chart-line", label: "Analytics" },
+        // { to: "/company/messages", icon: "envelope", label: "Messages" },
+        // { to: "/company/profile", icon: "building", label: "Company Profile" },
       ];
     }
     return [];

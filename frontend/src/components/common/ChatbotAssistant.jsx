@@ -1,38 +1,18 @@
 import React, { useState, useEffect, useRef } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import api from "../../utils/api";
+import { useSelector } from "react-redux";
+import { toast } from "react-toastify";
 
-const ChatbotAssistant = () => {
+const ChatbotAssistant = ({ applicationId }) => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [currentLanguage, setCurrentLanguage] = useState("en");
+  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Supported languages
-  const languages = [
-    { code: "en", name: "English" },
-    { code: "es", name: "Spanish" },
-    { code: "fr", name: "French" },
-    { code: "de", name: "German" },
-    { code: "zh", name: "Chinese" },
-  ];
-
-  // Welcome message
-  useEffect(() => {
-    if (messages.length === 0) {
-      setMessages([
-        {
-          id: "welcome",
-          content:
-            "Hello! I'm your AI career assistant. I can help with your job search, resume tips, or answer questions about our platform.",
-          isBot: true,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-    }
-  }, [messages]);
+  const application = useSelector((state) => state.application?.application);
+  const user = useSelector((state) => state.auth.user);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -41,133 +21,54 @@ const ChatbotAssistant = () => {
     }
   }, [messages, isChatOpen]);
 
+  // Load messages
+  useEffect(() => {
+    if (application?.messages) {
+      setMessages(application.messages);
+    }
+  }, [application]);
+
   // Handle sending a message
   const handleSendMessage = async (e) => {
     e?.preventDefault();
 
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || sending) return;
 
-    // Add user message to chat
-    const userMessage = {
-      id: Date.now().toString(),
-      content: newMessage,
-      isBot: false,
-      timestamp: new Date().toISOString(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setNewMessage("");
-    setIsTyping(true);
+    const tempId = Date.now().toString();
 
     try {
-      // Get conversation context for context-aware responses
-      const context = messages
-        .slice(-4) // Last 4 messages for context
-        .map((msg) => `${msg.isBot ? "Assistant" : "User"}: ${msg.content}`)
-        .join("\n");
-      const response = await api.post("/chat", {
-        message: newMessage,
-        context,
-        language: currentLanguage,
-      });
+      setSending(true);
 
-      // Add bot response after a short delay to simulate typing
-      setTimeout(() => {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            content: response.data.response,
-            isBot: true,
-            timestamp: new Date().toISOString(),
-          },
-        ]);
-        setIsTyping(false);
-      }, 1000);
-    } catch (error) {
-      console.error("Chat error:", error);
+      // Add message optimistically
+      const optimisticMessage = {
+        id: tempId,
+        content: newMessage,
+        sender: user.role,
+        createdAt: new Date().toISOString(),
+      };
 
-      // Fallback response for development/demo
-      setTimeout(() => {
-        let botResponse =
-          "I'm sorry, I couldn't process your request right now.";
+      setMessages((prev) => [...prev, optimisticMessage]);
+      setNewMessage("");
 
-        // Generate a demo response based on keywords
-        if (newMessage.toLowerCase().includes("resume")) {
-          botResponse =
-            "Your resume is crucial for job applications. Make sure to highlight your key skills and experience relevant to the positions you're applying for.";
-        } else if (newMessage.toLowerCase().includes("interview")) {
-          botResponse =
-            "For interview preparation, research the company, practice common questions, and prepare examples that demonstrate your skills and experience.";
-        } else if (newMessage.toLowerCase().includes("job")) {
-          botResponse =
-            "Our job matching system uses AI to find positions that best match your skills and experience. Make sure your profile is complete for the best results.";
-        } else if (newMessage.toLowerCase().includes("thank")) {
-          botResponse =
-            "You're welcome! I'm here to help with any other questions you might have.";
+      const response = await api.post(
+        `/applications/${applicationId}/messages`,
+        {
+          content: newMessage,
         }
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            content: botResponse,
-            isBot: true,
-            timestamp: new Date().toISOString(),
-          },
-        ]);
-        setIsTyping(false);
-      }, 1000);
-    }
-  };
-
-  // Handle language change
-  const handleLanguageChange = async (code) => {
-    setCurrentLanguage(code);
-
-    // Translate welcome message when language changes
-    try {
-      const response = await axios.post("/api/translate", {
-        text: "Hello! I'm your AI career assistant. I can help with your job search, resume tips, or answer questions about our platform.",
-        targetLanguage: code,
-      });
-
-      // Update welcome message with translated text
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === "welcome"
-            ? { ...msg, content: response.data.translatedText }
-            : msg
-        )
       );
-    } catch (error) {
-      console.error("Translation error:", error);
-      // In development/demo, simulate translation
-      if (code === "es") {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === "welcome"
-              ? {
-                  ...msg,
-                  content:
-                    "¡Hola! Soy tu asistente de carrera con IA. Puedo ayudarte con tu búsqueda de empleo, consejos para tu currículum o responder preguntas sobre nuestra plataforma.",
-                }
-              : msg
-          )
-        );
-      } else if (code === "fr") {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === "welcome"
-              ? {
-                  ...msg,
-                  content:
-                    "Bonjour ! Je suis votre assistant de carrière IA. Je peux vous aider dans votre recherche d'emploi, vous donner des conseils sur votre CV ou répondre à vos questions sur notre plateforme.",
-                }
-              : msg
-          )
-        );
+
+      // Update messages with server response
+      if (Array.isArray(response.data)) {
+        setMessages(response.data);
       }
+    } catch (error) {
+      console.error("Error sending message:", error);
+      toast.error("Failed to send message");
+      // Revert optimistic update
+      setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
+      setNewMessage(newMessage);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -183,125 +84,152 @@ const ChatbotAssistant = () => {
     <>
       {/* Chat toggle button */}
       <button
-        className={`fixed bottom-6 right-6 rounded-full w-14 h-14 flex items-center justify-center shadow-lg transition-colors ${
+        className={`fixed bottom-6 right-6 rounded-full w-16 h-16 flex items-center justify-center shadow-xl transition-colors ${
           isChatOpen
-            ? "bg-error-500 hover:bg-error-600"
-            : "bg-primary-500 hover:bg-primary-600"
+            ? "bg-pink-500 hover:bg-pink-600"
+            : "bg-cyan-500 hover:bg-cyan-600"
         }`}
         onClick={() => setIsChatOpen(!isChatOpen)}
       >
         <FontAwesomeIcon
           icon={isChatOpen ? "times" : "comment-dots"}
-          className="text-white text-xl"
+          className="text-white text-2xl"
         />
       </button>
 
-      {/* Chat panel */}
+      {/* Chat panel with dark theme */}
       <div
-        className={`fixed bottom-24 right-6 w-96 bg-background-secondary rounded-lg shadow-xl transition-all duration-300 transform origin-bottom-right ${
+        className={`fixed bottom-24 right-6 w-[400px] bg-gray-900 rounded-lg shadow-2xl border border-gray-800 transition-all duration-300 transform origin-bottom-right ${
           isChatOpen
             ? "scale-100 opacity-100"
             : "scale-90 opacity-0 pointer-events-none"
         }`}
       >
         {/* Chat header */}
-        <div className="bg-primary-900 rounded-t-lg p-4 flex items-center justify-between">
+        <div
+          className={`rounded-t-lg p-4 flex items-center justify-between shadow-lg ${
+            user.role === "company"
+              ? "bg-gradient-to-r from-cyan-600 to-cyan-700"
+              : "bg-gradient-to-r from-fuchsia-600 to-fuchsia-700"
+          }`}
+        >
           <div className="flex items-center">
-            <div className="w-8 h-8 rounded-full bg-primary-700 flex items-center justify-center mr-3">
-              <FontAwesomeIcon icon="robot" className="text-primary-300" />
+            <div className="w-10 h-10 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center mr-3 shadow-lg">
+              <FontAwesomeIcon
+                icon={user.role === "company" ? "building" : "user"}
+                className="text-white/90 text-lg"
+              />
             </div>
             <div>
-              <h3 className="font-medium text-white">AI Career Assistant</h3>
-              <p className="text-xs text-gray-400">
-                24/7 help with your job search
+              <h3 className="font-bold text-white text-lg tracking-tight">
+                Message Thread
+              </h3>
+              <p className="text-sm text-white/90 font-medium mt-0.5">
+                {user.role === "company"
+                  ? "Candidate Messages"
+                  : "Company Messages"}
               </p>
             </div>
           </div>
-
-          {/* Language selector */}
-          <select
-            className="bg-primary-800 text-white text-sm border border-primary-700 rounded px-2 py-1"
-            value={currentLanguage}
-            onChange={(e) => handleLanguageChange(e.target.value)}
-          >
-            {languages.map((lang) => (
-              <option key={lang.code} value={lang.code}>
-                {lang.name}
-              </option>
-            ))}
-          </select>
         </div>
 
         {/* Chat messages */}
-        <div className="h-80 overflow-y-auto p-4 space-y-3">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${
-                message.isBot ? "justify-start" : "justify-end"
-              }`}
-            >
+        <div className="h-96 overflow-y-auto p-4 space-y-5 bg-gray-900">
+          {messages.map((message) => {
+            const isOwnMessage = message.sender === user.role;
+
+            return (
               <div
-                className={`max-w-[75%] rounded-lg px-4 py-2 ${
-                  message.isBot
-                    ? "bg-gray-700 text-white"
-                    : "bg-primary-700 text-white"
-                }`}
+                key={message.id || message._id || Date.now()}
+                className={`flex ${
+                  isOwnMessage ? "justify-end" : "justify-start"
+                } items-start gap-3`}
               >
-                <p className="text-sm whitespace-pre-line">{message.content}</p>
-                <p className="text-xs text-gray-400 text-right mt-1">
-                  {formatTime(message.timestamp)}
-                </p>
-              </div>
-            </div>
-          ))}
-
-          {/* Loading indicator */}
-          {isTyping && (
-            <div className="flex justify-start">
-              <div className="bg-gray-700 rounded-lg px-4 py-3 max-w-[75%]">
-                <div className="flex space-x-2">
-                  <div
-                    className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"
-                    style={{ animationDelay: "0ms" }}
-                  ></div>
-                  <div
-                    className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"
-                    style={{ animationDelay: "150ms" }}
-                  ></div>
-                  <div
-                    className="w-2 h-2 rounded-full bg-gray-400 animate-bounce"
-                    style={{ animationDelay: "300ms" }}
-                  ></div>
+                {!isOwnMessage && (
+                  <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center flex-shrink-0 shadow-md border border-gray-700/50">
+                    <FontAwesomeIcon
+                      icon={message.sender === "company" ? "building" : "user"}
+                      className="text-gray-300 text-lg"
+                    />
+                  </div>
+                )}
+                <div
+                  className={`max-w-[80%] rounded-2xl px-5 py-3.5 shadow-lg ${
+                    isOwnMessage
+                      ? user.role === "company"
+                        ? "bg-gradient-to-br from-cyan-600 to-cyan-700 text-white shadow-cyan-900/20"
+                        : "bg-gradient-to-br from-fuchsia-600 to-fuchsia-700 text-white shadow-fuchsia-900/20"
+                      : "bg-gray-800/95 text-gray-200 border border-gray-700 shadow-gray-900/10"
+                  }`}
+                >
+                  <p
+                    className={`text-[16px] whitespace-pre-line leading-relaxed font-medium ${
+                      isOwnMessage ? "text-white/95" : "text-gray-200"
+                    }`}
+                  >
+                    {message.content}
+                  </p>
+                  <p
+                    className={`text-xs ${
+                      isOwnMessage ? "text-white/80" : "text-gray-400"
+                    } text-right mt-2 font-medium`}
+                  >
+                    {formatTime(message.createdAt || message.timestamp)}
+                  </p>
                 </div>
+                {isOwnMessage && (
+                  <div className="w-10 h-10 rounded-full bg-gray-800/90 flex items-center justify-center flex-shrink-0 shadow-md border border-gray-700">
+                    <FontAwesomeIcon
+                      icon={user.role === "company" ? "building" : "user"}
+                      className="text-gray-300 text-lg"
+                    />
+                  </div>
+                )}
               </div>
-            </div>
-          )}
-
+            );
+          })}
           <div ref={messagesEndRef} />
         </div>
 
         {/* Chat input */}
-        <div className="p-4 border-t border-gray-700">
+        <div className="p-4 border-t border-gray-700/50 bg-gray-900/95 backdrop-blur-sm">
           <form
             onSubmit={handleSendMessage}
-            className="flex items-center gap-2"
+            className="flex items-center gap-3"
           >
             <input
               type="text"
-              className="flex-1 bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="Type a message..."
+              className="flex-1 bg-gray-800/90 text-gray-200 text-[16px] border border-gray-700/50 rounded-lg px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-opacity-50 focus:border-transparent placeholder-gray-500 shadow-inner transition-colors duration-200 focus:ring-cyan-500/70"
+              placeholder="Type your message..."
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              disabled={isTyping}
+              disabled={sending}
             />
 
             <button
               type="submit"
-              className="bg-primary-600 text-white rounded-lg p-2 hover:bg-primary-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!newMessage.trim() || isTyping}
+              className={`${
+                user.role === "company"
+                  ? "bg-cyan-700 hover:bg-cyan-800 active:bg-cyan-900"
+                  : "bg-fuchsia-700 hover:bg-fuchsia-800 active:bg-fuchsia-900"
+              } text-gray-100 rounded-lg px-5 py-3.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg font-medium text-[16px] active:scale-[0.98] disabled:active:scale-100`}
+              disabled={!newMessage.trim() || sending}
             >
-              <FontAwesomeIcon icon="paper-plane" />
+              {sending ? (
+                <FontAwesomeIcon
+                  icon="spinner"
+                  spin
+                  className="text-lg opacity-90"
+                />
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span>Send</span>
+                  <FontAwesomeIcon
+                    icon="paper-plane"
+                    className="text-lg opacity-90"
+                  />
+                </div>
+              )}
             </button>
           </form>
         </div>

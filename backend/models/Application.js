@@ -112,52 +112,40 @@ const applicationSchema = new mongoose.Schema(
           enum: ["candidate", "company", "system"],
           required: true,
         },
-        senderProfile: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-        },
         content: {
           type: String,
           required: true,
-          trim: true,
-        },
-        language: {
-          type: String,
-          default: "en",
         },
         createdAt: {
           type: Date,
           default: Date.now,
         },
-      },
-    ],
-    screeningResponses: [
-      {
-        question: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Job.screeningQuestions",
-          required: true,
-        },
-        questionText: {
+        language: {
           type: String,
-          trim: true,
-        },
-        response: {
-          type: String,
-          required: true,
-          trim: true,
-        },
-        llmEvaluation: {
-          score: {
-            type: Number,
-            min: 0,
-            max: 100,
-          },
-          feedback: String,
-          confidence: Number,
+          default: "en",
         },
       },
     ],
+    interview: {
+      score: {
+        type: Number,
+        min: 0,
+        max: 100,
+        default: 0,
+      },
+      status: {
+        type: String,
+        enum: ["not_started", "in_progress", "completed"],
+        default: "not_started",
+      },
+      currentQuestionIndex: {
+        type: Number,
+        default: 0,
+      },
+      summary: String,
+      strengths: [String],
+      weaknesses: [String],
+    },
     overallEvaluation: {
       totalScore: {
         type: Number,
@@ -224,6 +212,34 @@ applicationSchema.pre("save", async function (next) {
   }
   next();
 });
+
+// Get all interview messages
+applicationSchema.methods.getInterviewMessages = function () {
+  return this.messages.filter((msg) => msg.messageType === "interview");
+};
+
+// Get personal messages
+applicationSchema.methods.getPersonalMessages = function () {
+  return this.messages.filter((msg) => msg.messageType === "personal");
+};
+
+// Check if interview is active
+applicationSchema.methods.isInterviewActive = function () {
+  return this.interview.status === "in_progress";
+};
+
+// Get current interview question if any
+applicationSchema.methods.getCurrentQuestion = function () {
+  if (!this.isInterviewActive()) return null;
+  return this.messages.find(
+    (msg) =>
+      msg.messageType === "interview" &&
+      msg.metadata?.isInterviewQuestion &&
+      !this.messages.find(
+        (r) => r.sender === "candidate" && r.messageType === "interview"
+      )
+  );
+};
 
 const Application = mongoose.model("Application", applicationSchema);
 

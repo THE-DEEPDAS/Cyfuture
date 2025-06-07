@@ -9,290 +9,149 @@ import {
 import { calculateMatchScore } from "../services/enhancedJobMatching.js";
 import { notifyUser } from "../utils/notification.js";
 import asyncHandler from "express-async-handler";
+import {
+  startInterview,
+  evaluateResponse,
+} from "../services/interviewService.js";
 
 // @desc    Submit job application
 // @route   POST /api/applications/:jobId
 // @access  Private/Candidate
 export const applyToJob = asyncHandler(async (req, res) => {
-  const { jobId } = req.params;
-  const { resumeId, coverLetter, screeningResponses = [] } = req.body;
+  try {
+    const { jobId } = req.params;
+    const { resumeId, coverLetter } = req.body;
 
-  // Validate required fields
-  if (!resumeId) {
-    res.status(400);
-    throw new Error("Please select a resume");
-  }
-
-  // Find job and check if it exists and is active
-  const job = await Job.findById(jobId).populate("company");
-
-  if (!job) {
-    res.status(404);
-    throw new Error("Job not found");
-  } // Check screening questions
-  if (job.screeningQuestions?.length > 0) {
-    // Verify we have responses array
-    if (!Array.isArray(screeningResponses)) {
+    // 1. Basic validation
+    if (!resumeId) {
       res.status(400);
-      throw new Error("Invalid screening responses format");
+      throw new Error("Please select a resume");
     }
 
-    // Transform screeningResponses if they're in simple string format
-    let formattedResponses = screeningResponses;
-
-    // Check if we need to format responses (if they're just strings)
-    if (
-      screeningResponses.length === 0 ||
-      typeof screeningResponses[0] === "string" ||
-      !screeningResponses[0]?.question
-    ) {
-      formattedResponses = job.screeningQuestions.map((question, index) => ({
-        question: question._id,
-        questionText: question.question,
-        response: (screeningResponses[index] || "").trim(),
-      }));
-    } else {
-      // Add question text to properly formatted responses
-      formattedResponses = screeningResponses.map((response) => {
-        const questionObj = job.screeningQuestions.find(
-          (q) => q._id.toString() === response.question.toString()
-        );
-        return {
-          ...response,
-          response: (response.response || "").trim(),
-          questionText: questionObj?.question || "Unknown question",
-        };
-      });
+    if (!jobId) {
+      res.status(400);
+      throw new Error("Job ID is required");
     }
 
-    // Validate all required questions are answered
-    const missingResponses = job.screeningQuestions.filter(
-      (question, index) => {
-        if (!question.required) return false;
-        const response = formattedResponses.find(
-          (r) => r.question.toString() === question._id.toString()
-        );
-        return (
-          !response || !response.response || response.response.trim() === ""
-        );
-      }
-    );
+    // 2. Find and validate the job
+    const job = await Job.findById(jobId).populate("company");
+    if (!job) {
+      res.status(404);
+      throw new Error("Job not found");
+    }
 
-    if (missingResponses.length > 0) {
+    if (!job.isActive) {
+      res.status(400);
+      throw new Error("This job posting is no longer active");
+    }
+
+    // 3. Check if already applied
+    const existingApplication = await Application.findOne({
+      job: jobId,
+      candidate: req.user._id,
+    });
+
+    if (existingApplication) {
       res.status(400);
       throw new Error(
-        `Please answer the following required questions:\n${missingResponses
-          .map((q) => q.question)
-          .join("\n")}`
+        "You have already submitted an application for this position. " +
+          "You can check the status of your application in your dashboard. " +
+          "Each candidate can only submit one application per job posting."
       );
     }
 
-    // Replace with formatted responses
-    req.body.screeningResponses = formattedResponses;
-
-    // Validate required questions are answered
-    for (let i = 0; i < job.screeningQuestions.length; i++) {
-      const question = job.screeningQuestions[i];
-      const response = screeningResponses.find(
-        (resp) => resp.question.toString() === question._id.toString()
-      );
-
-      if (question.required && (!response || !response.response.trim())) {
-        res.status(400);
-        throw new Error(
-          `Please answer the required question: ${question.question}`
-        );
-      }
-    }
-  }
-
-  if (!job.isActive) {
-    res.status(400);
-    throw new Error("This job is no longer accepting applications");
-  }
-
-  // Check if already applied
-  const existingApplication = await Application.findOne({
-    job: jobId,
-    candidate: req.user._id,
-  });
-
-  if (existingApplication) {
-    res.status(400);
-    throw new Error("You have already applied for this job");
-  }
-
-  try {
-    // Find and validate the resume
-    const resume = await Resume.findOne({
-      _id: resumeId,
-      user: req.user._id,
-    }).select("+parsedData"); // Explicitly include parsedData
-
+    // 4. Find and validate the resume
+    const resume = await Resume.findById(resumeId);
     if (!resume) {
       res.status(404);
       throw new Error("Resume not found");
     }
 
-    if (!resume.parsedData) {
-      res.status(400);
-      throw new Error("Resume data is incomplete. Please update your resume.");
-    } // Get match score and analysis
-    let matchScore = 0;
-    let matchingScores = null;
-    let llmAnalysis = null;
-    try {
-      // Calculate match score safely with error handling
-      const matchResult = await calculateMatchScore(job, resume.parsedData);
-      if (matchResult && typeof matchResult.score === "number") {
-        matchScore = Math.max(0, Math.min(100, matchResult.score)); // Ensure score is between 0-100
-        matchingScores = {
-          skills: Math.max(
-            0,
-            Math.min(100, matchResult.breakdown?.skillMatch?.total || 0)
-          ),
-          experience: Math.max(
-            0,
-            Math.min(100, matchResult.breakdown?.experienceMatch?.score || 0)
-          ),
-          total: Math.max(0, Math.min(100, matchResult.score)),
-        };
-      } else {
-        // If match result is invalid, use moderate default score
-        console.warn("Invalid match result structure:", matchResult);
-        matchScore = 50;
-        matchingScores = {
-          skills: 50,
-          experience: 50,
-          total: 50,
-        };
-      }
-    } catch (matchError) {
-      console.error("Error calculating match score:", matchError);
-      // Default to a moderate score if calculation fails
-      matchScore = 50;
-      matchingScores = {
-        skills: 50,
-        experience: 50,
-        total: 50,
-      };
-    }
+    // 5. Create application with interview state
+    const application = await Application.create({
+      job: jobId,
+      candidate: req.user._id,
+      resume: resumeId,
+      coverLetter: coverLetter?.trim(),
+      status: "pending",
+      interview: {
+        status: "not_started",
+        currentQuestionIndex: 0,
+        score: 0,
+      },
+    });
 
-    // Get LLM analysis if enabled
-    if (job.llmEvaluation?.enabled) {
-      try {
-        llmAnalysis = await analyzeCandidate(
-          resume.parsedData,
-          job,
-          screeningResponses
-        );
-      } catch (analysisError) {
-        console.error("Error generating LLM analysis:", analysisError);
-        // Continue without LLM analysis
-      }
-    } // Create application with error handling
-    let application;
-    try {
-      application = await Application.create({
-        job: jobId,
-        matchScore: typeof matchScore === "number" ? matchScore : 0,
-        matchingScores: matchingScores,
-        candidate: req.user._id,
-        resume: resumeId,
-        coverLetter: coverLetter || "",
-        screeningResponses: req.body.screeningResponses || [],
-        status: "pending",
-        llmAnalysis: llmAnalysis || null,
-        messages: [], // Initialize with empty messages array
-      });
-    } catch (createError) {
-      console.error("Error creating application:", createError);
-
-      // Check for specific MongoDB errors
-      if (createError.name === "ValidationError") {
-        res.status(400);
-        throw new Error(
-          "Invalid application data: " +
-            Object.values(createError.errors)
-              .map((e) => e.message)
-              .join(", ")
-        );
-      } else if (createError.code === 11000) {
-        res.status(400);
-        throw new Error("You have already applied for this job");
-      } else {
-        res.status(500);
-        throw new Error("Failed to submit application. Please try again.");
-      }
-    }
-
-    // Send application notification
-    try {
-      // Update notification handling in sendApplicationNotification
-      const sendApplicationNotification = async (
-        application,
-        job,
-        analysis
-      ) => {
-        // Notify company about new application
-        await notifyUser(
-          job.company._id.toString(),
-          "status", // Changed from "application" to "status"
-          "New Job Application",
-          `${req.user.name} has applied for ${job.title}`,
-          {
-            jobId: job._id.toString(),
-            applicationId: application._id.toString(),
-            candidateId: req.user._id.toString(),
-            score: analysis?.score || null,
-          }
-        );
-
-        // Notify candidate about application status
-        if (analysis?.isRecommended === false) {
-          await notifyUser(
-            req.user._id.toString(),
-            "status", // Changed from "APPLICATION_FEEDBACK" to "status"
-            "Application Status Update",
-            `Thank you for applying to ${
-              job.title
-            }. Based on our initial assessment, we regret to inform you that your profile may not be the best match for this role at this time. ${
-              analysis?.analysis?.feedback || ""
-            }`,
-            {
-              jobId: job._id.toString(),
-              applicationId: application._id.toString(),
-              status: "reviewing",
-              feedback: analysis?.analysis?.improvements || [],
-            }
-          );
-        } else {
-          await notifyUser(
-            req.user._id.toString(),
-            "status", // Changed from "application" to "status"
-            "Application Received",
-            `Your application for ${job.title} has been received and is under review.`,
-            {
-              jobId: job._id.toString(),
-              applicationId: application._id.toString(),
-              status: "reviewing",
-            }
-          );
-        }
-      };
-
-      await sendApplicationNotification(application, job, llmAnalysis);
-    } catch (notificationError) {
-      console.error("Error sending notifications:", notificationError);
-      // Continue even if notifications fail
+    // 6. Start chatbot interview if job has screening questions
+    if (job.screeningQuestions?.length > 0) {
+      await startInterview(application);
     }
 
     res.status(201).json(application);
   } catch (error) {
-    console.error("Application submission error:", error);
-    res.status(500);
-    throw new Error(`Failed to submit application: ${error.message}`);
+    console.error("Application error:", error);
+    throw error;
   }
+});
+
+// @desc    Start automated interview
+// @route   POST /api/applications/:id/interview/start
+// @access  Private/Company
+export const startAutomatedInterview = asyncHandler(async (req, res) => {
+  const application = await Application.findById(req.params.id).populate({
+    path: "job",
+    select: "title company requiredSkills",
+    populate: {
+      path: "company",
+      select: "name",
+    },
+  });
+
+  if (!application) {
+    res.status(404);
+    throw new Error("Application not found");
+  }
+
+  // Check if company owns this job
+  if (application.job.company._id.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Not authorized to start interview for this application");
+  }
+
+  // Start the interview
+  const updatedApplication = await startInterview(application);
+  res.json(updatedApplication);
+});
+
+// @desc    Submit interview response
+// @route   POST /api/applications/:id/interview/respond
+// @access  Private/Candidate
+export const submitInterviewResponse = asyncHandler(async (req, res) => {
+  const { response } = req.body;
+
+  if (!response) {
+    res.status(400);
+    throw new Error("Response is required");
+  }
+
+  const application = await Application.findById(req.params.id).populate({
+    path: "job",
+    select: "title requiredSkills",
+  });
+
+  if (!application) {
+    res.status(404);
+    throw new Error("Application not found");
+  }
+
+  // Check if candidate owns this application
+  if (application.candidate.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Not authorized to submit response for this application");
+  }
+
+  // Evaluate response and get next question
+  const updatedApplication = await evaluateResponse(application, response);
+  res.json(updatedApplication);
 });
 
 // @desc    Get all applications for a candidate
@@ -305,10 +164,11 @@ export const getCandidateApplications = asyncHandler(async (req, res) => {
       res.status(401);
       throw new Error("User not authenticated");
     }
+    // Find applications for this candidate
     const applications = await Application.find({ candidate: req.user._id })
       .populate({
         path: "job",
-        select: "title company location type status screeningQuestions",
+        select: "title company location type screeningQuestions",
         populate: {
           path: "company",
           select: "companyName",
@@ -317,10 +177,6 @@ export const getCandidateApplications = asyncHandler(async (req, res) => {
       .populate({
         path: "resume",
         select: "fileUrl parsedData",
-      })
-      .populate({
-        path: "messages.senderProfile",
-        select: "name profilePicture",
       })
       .select(
         "status matchScore createdAt messages screeningResponses coverLetter llmAnalysis isShortlisted"
@@ -333,10 +189,26 @@ export const getCandidateApplications = asyncHandler(async (req, res) => {
       return res.json([]);
     }
 
-    // Filter out any applications with missing job or company info
-    const validApplications = applications.filter(
-      (app) => app && app.job && app.job.company && app.job.title
-    );
+    // Transform each application's messages to include proper sender info
+    const validApplications = applications
+      .map((app) => {
+        if (app.messages) {
+          app.messages = app.messages.map((msg) => ({
+            ...msg,
+            senderInfo: {
+              name:
+                msg.sender === "system"
+                  ? "AI Interviewer"
+                  : msg.sender === "company"
+                  ? app.job.company.companyName
+                  : "You",
+              type: msg.sender,
+            },
+          }));
+        }
+        return app;
+      })
+      .filter((app) => app && app.job && app.job.company && app.job.title);
 
     res.json(validApplications);
   } catch (error) {
@@ -781,31 +653,26 @@ export const updateApplicationStatus = asyncHandler(async (req, res) => {
   res.json(updatedApplication);
 });
 
-// @desc    Send message in application thread
+// @desc    Send direct message
 // @route   POST /api/applications/:id/messages
 // @access  Private
 export const sendMessage = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { content, language = "en" } = req.body;
+  const { content } = req.body;
 
   if (!content) {
     res.status(400);
     throw new Error("Message content is required");
   }
-
-  const application = await Application.findById(id)
+  const application = await Application.findById(req.params.id)
     .populate({
       path: "job",
-      select: "company title",
+      select: "company",
       populate: {
         path: "company",
-        select: "companyName",
+        select: "_id",
       },
     })
-    .populate({
-      path: "candidate",
-      select: "name email profilePicture",
-    });
+    .populate("candidate", "_id");
 
   if (!application) {
     res.status(404);
@@ -815,8 +682,19 @@ export const sendMessage = asyncHandler(async (req, res) => {
   // Check permissions
   const isCompany = req.user.role === "company";
   const isCandidate = req.user.role === "candidate";
-  const companyId = application.job.company._id || application.job.company;
 
+  // Validate required data exists
+  if (!application.candidate) {
+    res.status(500);
+    throw new Error("Application data is corrupted: missing candidate");
+  }
+
+  if (!application.job?.company) {
+    res.status(500);
+    throw new Error("Application data is corrupted: missing job company");
+  }
+
+  // Check candidate permission
   if (
     isCandidate &&
     application.candidate._id.toString() !== req.user._id.toString()
@@ -825,58 +703,102 @@ export const sendMessage = asyncHandler(async (req, res) => {
     throw new Error("Not authorized to send messages for this application");
   }
 
-  if (isCompany && companyId.toString() !== req.user._id.toString()) {
+  // Check company permission
+  if (
+    isCompany &&
+    application.job.company._id.toString() !== req.user._id.toString()
+  ) {
     res.status(403);
     throw new Error("Not authorized to send messages for this application");
   }
-
-  // Create and add new message
-  const newMessage = {
-    sender: req.user.role, // 'company' or 'candidate'
-    senderProfile: req.user._id, // Set the senderProfile to the user's ID
-    content: content,
-    language: language,
+  // Add message
+  application.messages.push({
+    sender: isCompany ? "company" : "candidate",
+    content,
     createdAt: new Date(),
-  };
+  });
 
-  // Initialize messages array if it doesn't exist
-  if (!application.messages) {
-    application.messages = [];
-  }
-
-  application.messages.push(newMessage);
-
-  // Get recipient ID (if sender is company, recipient is candidate, and vice versa)
-  const recipientId = isCompany
-    ? application.candidate._id.toString()
-    : companyId.toString();
-
-  // Send notification
-  try {
-    await notifyUser(
-      recipientId,
-      "message",
-      "New Message",
-      `You have a new message regarding your application for ${application.job.title}`,
-      {
-        applicationId: application._id.toString(),
-        jobId: application.job._id.toString(),
-      }
-    );
-  } catch (err) {
-    console.error("Error sending notification:", err);
-    // Continue even if notification fails
-  }
-
-  // Save application and return updated messages with populated senderProfile
-  await application.save();
-
-  // Fetch the application again with populated senderProfile
-  const updatedApplication = await Application.findById(id).populate(
-    "messages.senderProfile"
-  );
-
+  const updatedApplication = await application.save();
   res.json(updatedApplication.messages);
+});
+
+// @desc    Get application messages
+// @route   GET /api/applications/:id/messages
+// @access  Private
+export const getMessages = asyncHandler(async (req, res) => {
+  try {
+    if (!req.params.id) {
+      res.status(400);
+      throw new Error("Application ID is required");
+    }
+
+    const application = await Application.findById(req.params.id)
+      .populate({
+        path: "job",
+        select: "title company",
+        populate: {
+          path: "company",
+          select: "companyName _id",
+        },
+      })
+      .populate({
+        path: "candidate",
+        select: "name email _id",
+      });
+
+    if (!application) {
+      res.status(404);
+      throw new Error("Application not found");
+    }
+
+    // Check permissions first before accessing potentially undefined properties
+    const isCompany = req.user.role === "company";
+    const isCandidate = req.user.role === "candidate";
+
+    // Validate required data exists
+    if (!application.candidate || !application.job) {
+      console.error("Application data corrupted:", {
+        applicationId: application._id,
+        hasCandidate: !!application.candidate,
+        hasJob: !!application.job,
+        hasCompany: !!application.job?.company,
+      });
+      res.status(500);
+      throw new Error("Application data is corrupted");
+    }
+
+    // Check authorization
+    if (
+      isCandidate &&
+      application.candidate._id.toString() !== req.user._id.toString()
+    ) {
+      res.status(403);
+      throw new Error("Not authorized to view messages for this application");
+    }
+
+    if (
+      isCompany &&
+      application.job.company._id.toString() !== req.user._id.toString()
+    ) {
+      res.status(403);
+      throw new Error("Not authorized to view messages for this application");
+    }
+
+    // Initialize messages array if undefined
+    if (!application.messages) {
+      application.messages = [];
+      await application.save();
+    }
+
+    return res.json(application.messages || []);
+  } catch (error) {
+    console.error("Error in getMessages:", error);
+    // Don't override existing status codes
+    if (!res.statusCode || res.statusCode === 200) {
+      res.status(500);
+    }
+    throw error;
+  }
 });
 
 /**
@@ -1414,8 +1336,7 @@ export const getApplicationMessages = asyncHandler(async (req, res) => {
     .populate({
       path: "candidate",
       select: "name email profilePicture _id",
-    })
-    .populate("messages.senderProfile");
+    });
 
   if (!application) {
     res.status(404);
@@ -1444,90 +1365,8 @@ export const getApplicationMessages = asyncHandler(async (req, res) => {
   res.json(application.messages);
 });
 
-// @desc    Start an automated interview for a candidate
-// @route   POST /api/applications/:id/interview
-// @access  Private/Company
-export const startAutomatedInterview = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-
-  const application = await Application.findById(id)
-    .populate({
-      path: "job",
-      select: "company title description requiredSkills experience",
-      populate: {
-        path: "company",
-        select: "companyName",
-      },
-    })
-    .populate({
-      path: "candidate",
-      select: "name email",
-    });
-
-  if (!application) {
-    res.status(404);
-    throw new Error("Application not found");
-  }
-
-  // Check if the user is the company that posted the job
-  if (application.job.company._id.toString() !== req.user._id.toString()) {
-    res.status(403);
-    throw new Error("Not authorized to start interviews for this application");
-  }
-
-  try {
-    // Import the interview service dynamically
-    const { generateInitialInterview } = await import(
-      "../services/interviewService.js"
-    );
-    // Generate interview introduction and questions
-    const interviewContent = await generateInitialInterview(application.job);
-
-    // Add a company message indicating interview start
-    application.messages.push({
-      sender: "company",
-      content:
-        "I've started an automated interview to help us learn more about your qualifications. Please respond to each question in detail.",
-      language: "en",
-      createdAt: new Date(),
-    });
-
-    // Add the AI interviewer message with questions
-    application.messages.push({
-      sender: "system",
-      content: interviewContent,
-      language: "en",
-      createdAt: new Date(),
-    });
-
-    // Save the application with the new messages
-    await application.save();
-
-    // Notify the candidate about the interview
-    const io = req.app.get("io");
-    await notifyUser(
-      io,
-      application.candidate._id.toString(),
-      "message",
-      "Automated Interview Started",
-      `${application.job.company.companyName} has started an automated interview for your application to ${application.job.title}.`,
-      {
-        applicationId: application._id.toString(),
-        jobId: application.job._id.toString(),
-      }
-    );
-
-    res.status(200).json({
-      success: true,
-      message: "Automated interview started successfully",
-      messages: application.messages,
-    });
-  } catch (error) {
-    console.error("Error starting automated interview:", error);
-    res.status(500);
-    throw new Error("Failed to start automated interview");
-  }
-});
+// SUBMIT INTERVIEW RESPONSE FUNCTION REMOVED TO AVOID DUPLICATE DECLARATION
+// See the original declaration above
 
 // @desc    Get candidates for a company
 // @route   GET /api/applications/candidates
@@ -1618,64 +1457,51 @@ export const getApplicationStats = asyncHandler(async (req, res) => {
         ],
         byInterviewStatus: [
           {
-            $addFields: {
-              hasInterview: {
-                $gt: [
-                  {
-                    $size: {
-                      $filter: {
-                        input: { $ifNull: ["$messages", []] },
-                        cond: { $eq: ["$$this.sender", "system"] },
-                      },
-                    },
-                  },
-                  0,
-                ],
-              },
-            },
-          },
-          {
             $group: {
-              _id: "$hasInterview",
+              _id: "$interview.status",
               count: { $sum: 1 },
             },
           },
         ],
         messageStats: [
           {
-            $addFields: {
-              messageCount: { $size: { $ifNull: ["$messages", []] } },
-            },
+            $unwind: "$messages",
           },
           {
             $group: {
               _id: null,
-              totalMessages: { $sum: "$messageCount" },
-              avgMessagesPerApp: { $avg: "$messageCount" },
+              totalMessages: { $sum: 1 },
+              avgMessagesPerApp: { $avg: { $size: "$messages" } },
             },
           },
         ],
       },
     },
+    {
+      $project: {
+        totalApplications: { $sum: "$byStatus.count" },
+        shortlisted: {
+          $sum: {
+            $cond: [{ $eq: ["$status", "shortlisted"] }, 1, 0],
+          },
+        },
+        hired: {
+          $sum: {
+            $cond: [{ $eq: ["$status", "hired"] }, 1, 0],
+          },
+        },
+        interviewing: {
+          $sum: {
+            $cond: [{ $eq: ["$interview.status", "in_progress"] }, 1, 0],
+          },
+        },
+        totalMessages: { $arrayElemAt: ["$messageStats.totalMessages", 0] },
+        avgMessagesPerApp: {
+          $arrayElemAt: ["$messageStats.avgMessagesPerApp", 0],
+        },
+      },
+    },
   ]);
 
-  // Process stats into a more usable format
-  const statusCounts = stats[0].byStatus.reduce((acc, curr) => {
-    acc[curr._id] = curr.count;
-    return acc;
-  }, {});
-
-  res.json({
-    totalApplications: await Application.countDocuments({
-      job: { $in: jobIds },
-    }),
-    shortlisted: statusCounts.shortlisted || 0,
-    hired: statusCounts.hired || 0,
-    interviewing:
-      stats[0].byInterviewStatus.find((s) => s._id === true)?.count || 0,
-    messageStats: stats[0].messageStats[0] || {
-      totalMessages: 0,
-      avgMessagesPerApp: 0,
-    },
-  });
+  res.json(stats[0] || {});
 });

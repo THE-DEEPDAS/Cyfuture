@@ -3,17 +3,200 @@
 import { generateChatResponse } from "../utils/llm.js";
 import Application from "../models/Application.js";
 
-// Cache for interview responses
-const interviewCache = new Map();
-const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+const INTERVIEW_QUESTIONS = [
+  {
+    category: "experience",
+    templates: [
+      "Could you describe your most relevant experience for this {role} position?",
+      "What challenges have you faced in previous roles similar to {role}?",
+    ],
+  },
+  {
+    category: "technical",
+    templates: [
+      "How would you rate your proficiency with {skill}, and could you provide an example of using it?",
+      "Could you describe a technical project where you used {skill}?",
+    ],
+  },
+  {
+    category: "behavioral",
+    templates: [
+      "Can you describe a challenging situation in your previous work and how you handled it?",
+      "How do you approach learning new technologies or skills in your work?",
+    ],
+  },
+];
 
-// Add custom formatting for AI messages to ensure readability
-const formatAIResponse = (response) => {
-  // Format questions into a more readable structure
-  return response
-    .replace(/(\d+\.\s*[^.!?]+[.!?])\s*/g, "$1\n\n") // Add extra newline after numbered points
-    .replace(/(\n{3,})/g, "\n\n") // Normalize multiple newlines
-    .trim();
+const generateQuestion = (template, replacements) => {
+  let question = template;
+  for (const [key, value] of Object.entries(replacements)) {
+    question = question.replace(`{${key}}`, value);
+  }
+  return question;
+};
+
+/**
+ * Starts the automated interview process for a job application
+ * @param {Object} application - The job application
+ * @returns {Object} - Updated application with interview messages
+ */
+export const startInterview = async (application) => {
+  try {
+    // Make sure the application has job data
+    const populatedApplication = await Application.findById(application._id)
+      .populate({
+        path: "job",
+        select: "title company screeningQuestions requiredSkills",
+      })
+      .populate("candidate", "name");
+
+    // Generate initial greeting
+    const greeting = {
+      sender: "system",
+      content: `Hello ${populatedApplication.candidate.name}! I'm the AI interviewer for the ${populatedApplication.job.title} position. I'll be asking you a series of questions to better understand your qualifications. Please provide detailed responses.`,
+      timestamp: new Date(),
+      messageType: "interview",
+      metadata: {
+        isInterviewQuestion: false,
+        isGreeting: true,
+      },
+    };
+
+    // Initialize or reset interview state
+    populatedApplication.interview = {
+      status: "in_progress",
+      currentQuestionIndex: 0,
+      score: 0,
+      startedAt: new Date(),
+      responses: [],
+    };
+
+    // Initialize messages array if it doesn't exist
+    if (!populatedApplication.messages) {
+      populatedApplication.messages = [];
+    }
+
+    // Add greeting
+    populatedApplication.messages.push(greeting);
+
+    // Add first question if screening questions exist
+    if (populatedApplication.job.screeningQuestions?.length > 0) {
+      const firstQuestion = {
+        sender: "system",
+        content: populatedApplication.job.screeningQuestions[0].question,
+        timestamp: new Date(),
+        messageType: "interview",
+        metadata: {
+          isInterviewQuestion: true,
+          questionIndex: 0,
+        },
+      };
+      populatedApplication.messages.push(firstQuestion);
+    } else {
+      // If no screening questions, generate a default question based on job requirements
+      const defaultQuestion = {
+        sender: "system",
+        content: `Could you tell me about your experience with ${
+          populatedApplication.job.requiredSkills?.join(", ") ||
+          "the required skills for this role"
+        }?`,
+        timestamp: new Date(),
+        messageType: "interview",
+        metadata: {
+          isInterviewQuestion: true,
+          questionIndex: 0,
+          isDefaultQuestion: true,
+        },
+      };
+      populatedApplication.messages.push(defaultQuestion);
+    }
+
+    await populatedApplication.save();
+    return populatedApplication;
+  } catch (error) {
+    console.error("Interview start error:", error);
+    throw error;
+  }
+};
+
+/**
+ * Evaluates a candidate's response to an interview question
+ * @param {Object} application - The job application
+ * @param {String} response - The candidate's response
+ * @returns {Object} - Updated application with evaluation results
+ */
+export const evaluateResponse = async (application, response) => {
+  try {
+    const job = await application.populate("job");
+    const currentIndex = application.interview.currentQuestionIndex;
+    const questions = job.screeningQuestions || [];
+
+    // Add candidate response to messages
+    application.messages.push({
+      sender: "candidate",
+      content: response,
+      timestamp: new Date(),
+      messageType: "interview",
+    });
+
+    // Evaluate response and calculate score
+    const evaluation = await generateChatResponse(
+      `Evaluate this candidate response to the screening question: "${questions[currentIndex]?.question}"
+      Response: "${response}"
+      
+      Rate the response from 0-100 based on:
+      - Relevance to the question
+      - Completeness of answer
+      - Specific examples/details
+      - Professional communication
+      
+      Return only the numeric score.`,
+      "",
+      "en"
+    );
+
+    // Update score
+    const responseScore = parseInt(evaluation) || 50;
+    application.interview.score = Math.round(
+      (application.interview.score * currentIndex + responseScore) /
+        (currentIndex + 1)
+    );
+
+    // Move to next question if available
+    if (currentIndex + 1 < questions.length) {
+      application.interview.currentQuestionIndex = currentIndex + 1;
+      application.messages.push({
+        sender: "system",
+        content: questions[currentIndex + 1].question,
+        timestamp: new Date(),
+        messageType: "interview",
+        metadata: {
+          isInterviewQuestion: true,
+          questionIndex: currentIndex + 1,
+        },
+      });
+    } else {
+      // Interview complete
+      application.interview.status = "completed";
+      application.messages.push({
+        sender: "system",
+        content:
+          "Thank you for completing the interview questions! We'll review your responses and get back to you soon.",
+        timestamp: new Date(),
+        messageType: "interview",
+        metadata: {
+          isInterviewQuestion: false,
+          isComplete: true,
+        },
+      });
+    }
+
+    await application.save();
+    return application;
+  } catch (error) {
+    console.error("Response evaluation error:", error);
+    throw error;
+  }
 };
 
 /**

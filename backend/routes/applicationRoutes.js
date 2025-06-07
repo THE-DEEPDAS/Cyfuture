@@ -24,10 +24,26 @@ import {
   hireCandidate,
   startAutomatedInterview,
   getCandidates,
+  submitInterviewResponse,
 } from "../controllers/applicationController.js";
 
 const router = express.Router();
 
+// Interview routes - moved to the top for clarity
+router.post(
+  "/:id/interview/start",
+  protect,
+  companyOnly,
+  startAutomatedInterview
+);
+router.post(
+  "/:id/interview/respond",
+  protect,
+  candidate,
+  submitInterviewResponse
+);
+
+// Application routes
 // @route   POST /api/applications/:jobId
 router.post("/:jobId", protect, candidate, applyToJob);
 
@@ -67,10 +83,7 @@ router.delete("/:id/shortlist", protect, companyOnly, removeFromShortlist);
 // @route   POST /api/applications/:id/messages
 router.post("/:id/messages", protect, sendMessage);
 
-// @route   POST /api/applications/:id/interview
-router.post("/:id/interview", protect, companyOnly, startAutomatedInterview);
-
-// @route   GET /api/applications/job/:jobId
+// @route   POST /api/applications/job/:jobId
 router.get("/job/:jobId", protect, companyOnly, getJobApplications);
 
 // @route   POST /api/applications/job/:jobId/message
